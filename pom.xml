@@ -14,7 +14,21 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
+  <distributionManagement>
+    <repository>
+      <id>sourceforge</id>
+      <url>scpexe://dbattams,sdjson@shell.sf.net/home/frs/project/sdjson/repo</url>
+    </repository>
+  </distributionManagement>
+  
   <build>
+    <extensions>
+      <extension>
+        <groupId>org.apache.maven.wagon</groupId>
+         <artifactId>wagon-ssh-external</artifactId>
+         <version>2.6</version>
+      </extension>
+    </extensions>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
