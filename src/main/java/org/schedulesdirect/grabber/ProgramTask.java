@@ -30,11 +30,12 @@ import org.apache.commons.logging.LogFactory;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.schedulesdirect.api.JsonRequest;
 import org.schedulesdirect.api.NetworkEpgClient;
 import org.schedulesdirect.api.Program;
 import org.schedulesdirect.api.RestNouns;
 import org.schedulesdirect.api.ZipEpgClient;
+import org.schedulesdirect.api.json.IJsonRequestFactory;
+import org.schedulesdirect.api.json.JsonRequest;
 import org.schedulesdirect.api.utils.JsonResponseUtils;
 
 /**
@@ -49,26 +50,29 @@ class ProgramTask implements Runnable {
 	private JSONArray req;
 	private FileSystem vfs;
 	private NetworkEpgClient clnt;
-
+	private IJsonRequestFactory factory;
+	
 	/**
 	 * Constructor
 	 * @param req The array of program ids to be downloaded
 	 * @param vfs The name of the vfs being written to
 	 * @param clnt The EpgClient to be used to download the request
+	 * @param factory The JsonRequestFactory implementation to use
 	 */
-	public ProgramTask(Collection<String> progIds, FileSystem vfs, NetworkEpgClient clnt) throws JSONException {
+	public ProgramTask(Collection<String> progIds, FileSystem vfs, NetworkEpgClient clnt, IJsonRequestFactory factory) throws JSONException {
 		this.req = new JSONArray();
 		for(String id : progIds)
 			req.put(id);
 		this.vfs = vfs;
 		this.clnt = clnt;
+		this.factory = factory;
 	}
 
 	@SuppressWarnings("unchecked")
 	@Override
 	public void run() {
 		long start = System.currentTimeMillis();
-		JsonRequest req = new JsonRequest(JsonRequest.Action.POST, RestNouns.PROGRAMS, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
+		JsonRequest req = factory.get(JsonRequest.Action.POST, RestNouns.PROGRAMS, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
 		JSONObject input = new JSONObject();
 		input.put("request", this.req);
 		try (InputStream ins = req.submitForInputStream(input)) {

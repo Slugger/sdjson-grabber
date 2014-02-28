@@ -32,7 +32,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -65,7 +64,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.schedulesdirect.api.Config;
 import org.schedulesdirect.api.EpgClient;
-import org.schedulesdirect.api.JsonRequest;
 import org.schedulesdirect.api.Lineup;
 import org.schedulesdirect.api.Message;
 import org.schedulesdirect.api.NetworkEpgClient;
@@ -74,6 +72,9 @@ import org.schedulesdirect.api.UserStatus;
 import org.schedulesdirect.api.ZipEpgClient;
 import org.schedulesdirect.api.exception.InvalidCredentialsException;
 import org.schedulesdirect.api.exception.ServiceOfflineException;
+import org.schedulesdirect.api.json.IJsonRequestFactory;
+import org.schedulesdirect.api.json.JsonRequest;
+import org.schedulesdirect.api.json.JsonRequestFactory;
 import org.schedulesdirect.api.utils.AiringUtils;
 import org.schedulesdirect.api.utils.JsonResponseUtils;
 import org.schedulesdirect.grabber.utils.PathUtils;
@@ -160,10 +161,15 @@ public final class Grabber {
 	private long start;
 	private boolean logosWarned = false;
 	private Action action;
+	private IJsonRequestFactory factory;
 	
 	private ThreadPoolExecutor pool;
 
-	private void parseArgs(String[] args) {
+	public Grabber(IJsonRequestFactory factory) {
+		this.factory = factory;
+	}
+	
+	private boolean parseArgs(String[] args) {
 		List<String> finalArgs = new ArrayList<String>();
 		finalArgs.addAll(Arrays.asList(args));
 		try {
@@ -201,7 +207,7 @@ public final class Grabber {
 			parser.parse(finalArgs.toArray(new String[finalArgs.size()]));
 			if(globalOpts.isHelp()) {
 				parser.usage();
-				System.exit(1);
+				return false;
 			}
 			if(LOG == null) {
 				Appender a = null;
@@ -232,10 +238,11 @@ public final class Grabber {
 				parser.usage(cmd);
 			else
 				parser.usage();
-			System.exit(1);			
+			return false;
 		} catch(IOException e) {
 			throw new RuntimeException(e);
 		}
+		return true;
 	}
 	
 	private int deleteMessages(EpgClient clnt, Message[] msgs) throws IOException {
@@ -288,7 +295,7 @@ public final class Grabber {
 			display.info(String.format("%-20s %s %s%n", l.getUri().substring(l.getUri().lastIndexOf('/') + 1), l.getName(), l.getLocation()));
 	}
 
-	private void addLineup(NetworkEpgClient clnt) {
+	private boolean addLineup(NetworkEpgClient clnt) {
 		boolean oneFailure = false;
 		for(String lineup : addOpts.getIds()) {
 			try {
@@ -299,11 +306,12 @@ public final class Grabber {
 			}
 		}
 		if(oneFailure)
-			System.exit(1);
+			return false;
 		LOG.info("Headend(s) added successfully!");
+		return true;
 	}
 
-	private void removeHeadend(NetworkEpgClient clnt) {
+	private boolean removeHeadend(NetworkEpgClient clnt) {
 		boolean oneFailure = false;
 		for(String lineup : delOpts.getIds()) {
 			try {
@@ -314,8 +322,9 @@ public final class Grabber {
 			}
 		}
 		if(oneFailure)
-			System.exit(1);
+			return false;
 		LOG.info("Headend(s) deleted successfully!");
+		return true;
 	}
 
 	@SuppressWarnings("unchecked")
@@ -332,7 +341,18 @@ public final class Grabber {
 	}
 
 	private ThreadPoolExecutor createThreadPoolExecutor() {
-		return new ThreadPoolExecutor(0, globalOpts.getMaxThreads(), 10, TimeUnit.SECONDS, new SynchronousQueue<Runnable>(), new ThreadPoolExecutor.CallerRunsPolicy());
+		return new ThreadPoolExecutor(0, globalOpts.getMaxThreads(), 10, TimeUnit.SECONDS, new SynchronousQueue<Runnable>(), new ThreadPoolExecutor.CallerRunsPolicy()) {
+			@Override
+			protected void afterExecute(Runnable r, Throwable t) {
+				super.afterExecute(r, t);
+				if(t != null) {
+					Logger log = Logger.getLogger(r.getClass());
+					log.error("Task failed!", t);
+					if(!(r instanceof LogoTask))
+						failedTask = true;
+				}
+			}
+		};
 	}
 
 	private void updateZip(NetworkEpgClient clnt) throws IOException, JSONException {
@@ -349,10 +369,8 @@ public final class Grabber {
 				if(!zipClnt.getUserStatus().getLastServerRefresh().before(clnt.getUserStatus().getLastServerRefresh())) {
 					LOG.info("Current cache file contains latest data from Schedules Direct server; use --force-download to force a new download from server.");
 					boolean force = grabOpts.isForce();
-					if(!force && !Config.get().isDebugOverrideActive())
+					if(!force)
 						return;
-					else if(!force)
-						LOG.warn("Ignoring timestamp from Schedules Direct due to debug flag; proceeding with grab!");
 					else
 						LOG.warn("Forcing an update of data with the server due to user request!");
 				}
@@ -392,7 +410,7 @@ public final class Grabber {
 			Path logos = vfs.getPath("/logos/");
 			if(!Files.isDirectory(logos))
 				Files.createDirectory(logos);
-			JSONObject resp = new JsonRequest(JsonRequest.Action.GET, RestNouns.LINEUPS, clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null);
+			JSONObject resp = new JSONObject(factory.get(JsonRequest.Action.GET, RestNouns.LINEUPS, clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null));
 			if(!JsonResponseUtils.isErrorResponse(resp))
 				Files.write(lineups, resp.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET));
 			else
@@ -400,7 +418,7 @@ public final class Grabber {
 			
 			for(Lineup l : clnt.getLineups()) {
 				buildIgnoreList();
-				JSONObject o = new JsonRequest(JsonRequest.Action.GET, l.getUri(), clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null);
+				JSONObject o = new JSONObject(factory.get(JsonRequest.Action.GET, l.getUri(), clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null));
 				Files.write(vfs.getPath("/maps", ZipEpgClient.scrubFileName(String.format("%s.txt", l.getId()))), o.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET));
 				JSONArray stations = o.getJSONArray("stations");
 				JSONArray ids = new JSONArray();
@@ -414,7 +432,7 @@ public final class Grabber {
 						if(!grabOpts.isNoLogos()) {
 							if(logoCacheInvalid(obj, vfs))
 								pool.execute(new LogoTask(obj, vfs));
-							else
+							else if(LOG.isDebugEnabled())
 								LOG.debug(String.format("Skipped logo for %s; already cached!", obj.optString("callsign", null)));
 						} else if(!logosWarned) {
 							logosWarned = true;
@@ -423,17 +441,26 @@ public final class Grabber {
 					} else
 						LOG.debug(String.format("Skipped %s; already downloaded.", sid));
 					if(ids.length() == grabOpts.getMaxSchedChunk()) {
-						pool.execute(new ScheduleTask(ids, vfs, clnt, progCache));
+						pool.execute(new ScheduleTask(ids, vfs, clnt, progCache, factory));
 						ids = new JSONArray();
 					}
 				}
 				if(ids.length() > 0)
-					pool.execute(new ScheduleTask(ids, vfs, clnt, progCache));
+					pool.execute(new ScheduleTask(ids, vfs, clnt, progCache, factory));
 			}
 			pool.shutdown();
 			try {
-				pool.awaitTermination(15, TimeUnit.MINUTES);
-			} catch (InterruptedException e) {}
+				LOG.debug("Waiting for SchedLogoExecutor to terminate...");
+				if(pool.awaitTermination(15, TimeUnit.MINUTES))
+					LOG.debug("SchedLogoExecutor: Terminated successfully.");
+				else {
+					failedTask = true;
+					LOG.warn("SchedLogoExecutor: Termination timed out; some tasks probably didn't finish properly!");
+				}
+			} catch (InterruptedException e) {
+				failedTask = true;
+				LOG.warn("SchedLogoExecutor: Termination interrupted); some tasks probably didn't finish properly!");
+			}
 
 			pool = createThreadPoolExecutor();
 			String[] dirtyPrograms = progCache.getDirtyIds();
@@ -444,16 +471,25 @@ public final class Grabber {
 			for(String progId : dirtyPrograms) {
 				progIds.add(progId);
 				if(progIds.size() == grabOpts.getMaxProgChunk()) {
-					pool.execute(new ProgramTask(progIds, vfs, clnt));
+					pool.execute(new ProgramTask(progIds, vfs, clnt, factory));
 					progIds.clear();
 				}
 			}
 			if(progIds.size() > 0)
-				pool.execute(new ProgramTask(progIds, vfs, clnt));
+				pool.execute(new ProgramTask(progIds, vfs, clnt, factory));
 			pool.shutdown();
 			try {
-				pool.awaitTermination(15, TimeUnit.MINUTES);
-			} catch (InterruptedException e) {}
+				LOG.debug("Waiting for ProgramExecutor to terminate...");
+				if(pool.awaitTermination(15, TimeUnit.MINUTES))
+					LOG.debug("ProgramExecutor: Terminated successfully.");
+				else {
+					failedTask = true;
+					LOG.warn("ProgramExecutor: Termination timed out; some tasks probably didn't finish properly!");
+				}
+			} catch (InterruptedException e) {
+				failedTask = true;
+				LOG.warn("ProgramExecutor: Termination interrupted); some tasks probably didn't finish properly!");
+			}
 
 			String userData = clnt.getUserStatus().toJson();
 			if(failedTask) {
@@ -474,22 +510,23 @@ public final class Grabber {
 	
 	private boolean logoCacheInvalid(JSONObject station, FileSystem vfs) throws JSONException, IOException {
 		JSONObject logo = station.optJSONObject("logo");
-		//TMSBUG: The modified field shouldn't be optional
-		if(logo != null && logo.has("modified")) {
+		if(logo != null) {
 			String callsign = station.getString("callsign");
 			String ext = logo.getString("URL");
 			ext = ext.substring(ext.lastIndexOf('.') + 1);
 			Path p = vfs.getPath("logos", String.format("%s.%s", callsign, ext));
-			Date cached = new Date(Files.getLastModifiedTime(p).toMillis());
-			if(cached != null) {
-				Date lastMod;
-				try {
-					lastMod = Config.get().getDateTimeFormat().parse(logo.getString("modified"));
-				} catch (ParseException e) {
-					throw new IOException(e);
-				}
-				return cached.before(lastMod);
-			}
+			//TMSBUG: Cache data fields are missing; for now if we have a copy then that's good enough
+			return !Files.exists(p);
+//			Date cached = new Date(Files.getLastModifiedTime(p).toMillis());
+//			if(cached != null) {
+//				Date lastMod;
+//				try {
+//					lastMod = Config.get().getDateTimeFormat().parse(logo.getString("modified"));
+//				} catch (ParseException e) {
+//					throw new IOException(e);
+//				}
+//				return cached.before(lastMod);
+//			}
 		}
 		return true;
 	}
@@ -626,12 +663,13 @@ public final class Grabber {
 	 * @param args The command line args
 	 * @throws IOException Thrown on any unexpected IO error
 	 * @throws InvalidCredentialsException Thrown if the login attempt to Schedules Direct failed
+	 * @return 0 on success, non-zero otherwise; typically one would return this value back to the OS level caller
 	 */
-	public void run(String[] args) throws IOException, InvalidCredentialsException {
+	public int execute(String[] args) throws IOException, InvalidCredentialsException {
 		parseArgs(args);
 		if(parser.getParsedCommand() == null) {
 			parser.usage();
-			System.exit(1);
+			return 1;
 		}
 		NetworkEpgClient clnt = null;
 		try {
@@ -641,25 +679,25 @@ public final class Grabber {
 					LOG.debug(String.format("Client details: %s", clnt.getUserAgent()));
 				} catch(ServiceOfflineException e) {
 					LOG.error("Web service is offline!");
-					if(!Config.get().isDebugOverrideActive()) {
-						LOG.error("Please try again later.");
-						System.exit(1);
-					} else
-						LOG.warn("Ignoring web service status due to debug mode override!");
+					LOG.error("Please try again later.");
+					return 1;
 				}
 			}
 			action = Action.valueOf(parser.getParsedCommand().toUpperCase());
+			int rc = 1;
 			switch(action) {
 				case LIST:
-					if(!listOpts.isHelp())
+					if(!listOpts.isHelp()) {
 						listHeadends(clnt);
-					else
+						rc = 0;
+					} else
 						parser.usage(action.toString().toLowerCase());
 					break;
 				case GRAB:
-					if(!grabOpts.isHelp())
+					if(!grabOpts.isHelp()) {
 						updateZip(clnt);
-					else
+						rc = 0;
+					} else
 						parser.usage(action.toString().toLowerCase());
 					break;
 				case ADD:
@@ -671,20 +709,22 @@ public final class Grabber {
 //					break;
 				case DELETE: 
 					if(!delOpts.isHelp())
-						removeHeadend(clnt);
+						rc = removeHeadend(clnt) ? 0 : 1;
 					else
 						parser.usage(action.toString().toLowerCase());
 					break;
 				case INFO: 
-					if(!infoOpts.isHelp())
+					if(!infoOpts.isHelp()) {
 						dumpAccountInfo(clnt);
-					else
+						rc = 0;
+					} else
 						parser.usage(action.toString().toLowerCase());
 					break;
 				case SEARCH:
-					if(!searchOpts.isHelp())
+					if(!searchOpts.isHelp()) {
 						listHeadendsForZip(clnt);
-					else
+						rc = 0;
+					} else
 						parser.usage(action.toString().toLowerCase());
 					break;
 				case AUDIT:
@@ -694,29 +734,32 @@ public final class Grabber {
 //						a.run();
 //						if(a.isFailed()) {
 //							LOG.error("Auditor failed!");
-//							System.exit(1);
+//							return 1;
 //						}
 //					} else
 //						parser.usage(action.toString().toLowerCase());
 //					break;
 				case LISTMSGS:
-					if(!listMsgsOpts.isHelp())
+					if(!listMsgsOpts.isHelp()) {
 						listAllMessages(clnt);
-					else
+						rc = 0;
+					} else
 						parser.usage(action.toString().toLowerCase());
 					break;
 				case DELMSG:
 					if(!delMsgsOpts.isHelp()) {
 						if(deleteMessages(clnt, clnt.getUserStatus().getSystemMessages()) < delMsgsOpts.getIds().size())
 							deleteMessages(clnt, clnt.getUserStatus().getUserMessages());
+						rc = 0;
 					} else
 						parser.usage(action.toString().toLowerCase());
 					break;
 			}
+			return rc;
 		} catch(ParameterException e) {
 			System.out.println(e.getMessage());
 			parser.usage();
-			System.exit(1);
+			return 1;
 		} catch(JSONException e) {
 			throw new RuntimeException(e);
 		} finally {
@@ -758,10 +801,12 @@ public final class Grabber {
 	}
 
 	private void dumpAccountInfo(NetworkEpgClient clnt) throws IOException {
-		System.out.println(clnt.getUserStatus());
+		getDisplay().info(clnt.getUserStatus());
 	}
 	
 	public static void main(String[] args) throws Exception {
-		new Grabber().run(args);
+		int rc = new Grabber(new JsonRequestFactory()).execute(args);
+		if(rc != 0)
+			System.exit(rc);
 	}
 }
