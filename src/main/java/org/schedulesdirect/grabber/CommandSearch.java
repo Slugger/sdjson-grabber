@@ -25,12 +25,12 @@ import com.beust.jcommander.Parameters;
  * @author Derek Battams &lt;derek@battams.ca&gt;
  *
  */
-@Parameters(commandDescription = "Search for headend ids by zip & country")
+@Parameters(commandDescription = "Search for lineup ids by zip & country")
 class CommandSearch {	
 	@Parameter(names = {"--postal-code", "--zip-code"}, description = "Zip or postal code to search for", required = true, validateWith = SearchValidator.class)
 	private String postalCode;
 	
-	@Parameter(names = "--country", description = "Two letter ISO country code to search within; must be a country supported by service", required = true, validateWith = SearchValidator.class)
+	@Parameter(names = "--country", description = "Three letter ISO country code to search within; must be a country supported by service", required = true, validateWith = SearchValidator.class)
 	private String isoCountry;
 
 	@Parameter(names = {"--help", "-?", "--?"}, description = "Display help for this command", help = true)

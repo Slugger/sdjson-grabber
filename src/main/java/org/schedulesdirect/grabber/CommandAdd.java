@@ -27,9 +27,9 @@ import com.beust.jcommander.Parameters;
  * @author Derek Battams &lt;derek@battams.ca&gt;
  *
  */
-@Parameters(commandDescription = "Add headend(s) to your Schedules Direct JSON account")
+@Parameters(commandDescription = "Add lineup(s) to your Schedules Direct JSON account")
 class CommandAdd {
-	@Parameter(names = "--id", description = "Headend id to add to account", required = true, validateWith = NonEmptyStringValidator.class)
+	@Parameter(names = "--id", description = "Lineup id to add to account", required = true, validateWith = NonEmptyStringValidator.class)
 	private List<String> ids = null;
 
 	@Parameter(names = {"--help", "-?", "--?"}, description = "Display help for this command", help = true)
