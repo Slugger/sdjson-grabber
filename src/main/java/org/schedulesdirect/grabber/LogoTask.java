@@ -1,5 +1,5 @@
 /*
- *      Copyright 2013 Battams, Derek
+ *      Copyright 2013-2014 Battams, Derek
  *       
  *       Licensed under the Apache License, Version 2.0 (the "License");
  *       you may not use this file except in compliance with the License.
@@ -15,8 +15,10 @@
  */
 package org.schedulesdirect.grabber;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
@@ -25,6 +27,8 @@ import java.nio.file.StandardCopyOption;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.fluent.Request;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -42,17 +46,22 @@ class LogoTask implements Runnable {
 	private URL url;
 	private String callsign;
 	private String ext;
+	private String md5;
+	private JSONObject cache;
 
 	/**
 	 * Constructor
 	 * @param req A station object containing the details for the logo
 	 * @param vfs The name of the vfs used for storing the logo image
+	 * @param cache The internal cache index of the logos
 	 */
-	public LogoTask(JSONObject req, FileSystem vfs) throws JSONException {
+	public LogoTask(JSONObject req, FileSystem vfs, JSONObject cache) throws JSONException {
 		this.vfs = vfs;
 		callsign = req.getString("callsign");
 		this.req = req.optJSONObject("logo");
+		this.cache = cache;
 		if(this.req != null) {
+			this.md5 = this.req.optString("md5", null);
 			String urlStr = this.req.optString("URL", null);
 			try {
 				url = urlStr != null && urlStr.length() > 0 ? new URL(urlStr) : null;
@@ -69,14 +78,20 @@ class LogoTask implements Runnable {
 	public void run() {
 		if(req != null && url != null) {
 			long start = System.currentTimeMillis();
-			try(InputStream ins = url.openStream()) {
-				Path p = vfs.getPath("logos", String.format("%s.%s", callsign, ext));
-				Files.copy(ins, p, StandardCopyOption.REPLACE_EXISTING);
-				LOG.info(String.format("LogoTask COMPLETE for %s [%dms]", callsign, System.currentTimeMillis() - start));
-			} catch(Exception e) {
-				//TODO: Should a failed logo dload cause a timestamp reset in the cache?
-				// I'm thinking no for now
-				//Grabber.failedTask = true;
+			try {
+				HttpResponse resp = Request.Get(url.toURI()).execute().returnResponse();
+				if(resp.getStatusLine().getStatusCode() == 200) {
+					try(InputStream ins = resp.getEntity().getContent()) {
+						Path p = vfs.getPath("logos", String.format("%s.%s", callsign, ext));
+						Files.copy(ins, p, StandardCopyOption.REPLACE_EXISTING);
+						if(md5 != null)
+							synchronized(cache) {
+								cache.put(callsign, md5);
+							}
+						LOG.info(String.format("LogoTask COMPLETE for %s [%dms]", callsign, System.currentTimeMillis() - start));
+					}
+				}
+			} catch(IOException | URISyntaxException e) {
 				LOG.error(String.format("IOError grabbing logo for %s", callsign), e);
 			}
 		} else if(LOG.isDebugEnabled())

@@ -119,6 +119,10 @@ public final class Grabber {
 	 * Name of the "clean" logger used to display app output without level context
 	 */
 	static public final String LOGGER_APP_DISPLAY = "AppDisplay";
+	/**
+	 * Name of the file containing the logo cache details
+	 */
+	static public final String LOGO_CACHE = "logos.txt";
 	
 	/**
 	 * Has a download task failed?
@@ -162,6 +166,7 @@ public final class Grabber {
 	private boolean logosWarned = false;
 	private Action action;
 	private IJsonRequestFactory factory;
+	private JSONObject logoCache;
 	
 	private ThreadPoolExecutor pool;
 
@@ -344,7 +349,7 @@ public final class Grabber {
 		return new ThreadPoolExecutor(0, globalOpts.getMaxThreads(), 10, TimeUnit.SECONDS, new SynchronousQueue<Runnable>(), new ThreadPoolExecutor.CallerRunsPolicy()) {
 			@Override
 			protected void afterExecute(Runnable r, Throwable t) {
-				super.afterExecute(r, t);
+				//super.afterExecute(r, t);
 				if(t != null) {
 					Logger log = Logger.getLogger(r.getClass());
 					log.error("Task failed!", t);
@@ -410,6 +415,13 @@ public final class Grabber {
 			Path logos = vfs.getPath("/logos/");
 			if(!Files.isDirectory(logos))
 				Files.createDirectory(logos);
+			Path cache = vfs.getPath(LOGO_CACHE);
+			if(Files.exists(cache)) {
+				String cacheData = new String(Files.readAllBytes(cache), ZipEpgClient.ZIP_CHARSET);
+				logoCache = new JSONObject(cacheData);
+			} else
+				logoCache = new JSONObject();
+			
 			JSONObject resp = new JSONObject(factory.get(JsonRequest.Action.GET, RestNouns.LINEUPS, clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null));
 			if(!JsonResponseUtils.isErrorResponse(resp))
 				Files.write(lineups, resp.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET));
@@ -431,7 +443,7 @@ public final class Grabber {
 						ids.put(sid);
 						if(!grabOpts.isNoLogos()) {
 							if(logoCacheInvalid(obj, vfs))
-								pool.execute(new LogoTask(obj, vfs));
+								pool.execute(new LogoTask(obj, vfs, logoCache));
 							else if(LOG.isDebugEnabled())
 								LOG.debug(String.format("Skipped logo for %s; already cached!", obj.optString("callsign", null)));
 						} else if(!logosWarned) {
@@ -461,6 +473,7 @@ public final class Grabber {
 				failedTask = true;
 				LOG.warn("SchedLogoExecutor: Termination interrupted); some tasks probably didn't finish properly!");
 			}
+			Files.write(cache, logoCache.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
 
 			pool = createThreadPoolExecutor();
 			String[] dirtyPrograms = progCache.getDirtyIds();
@@ -512,21 +525,9 @@ public final class Grabber {
 		JSONObject logo = station.optJSONObject("logo");
 		if(logo != null) {
 			String callsign = station.getString("callsign");
-			String ext = logo.getString("URL");
-			ext = ext.substring(ext.lastIndexOf('.') + 1);
-			Path p = vfs.getPath("logos", String.format("%s.%s", callsign, ext));
-			//TMSBUG: Cache data fields are missing; for now if we have a copy then that's good enough
-			return !Files.exists(p);
-//			Date cached = new Date(Files.getLastModifiedTime(p).toMillis());
-//			if(cached != null) {
-//				Date lastMod;
-//				try {
-//					lastMod = Config.get().getDateTimeFormat().parse(logo.getString("modified"));
-//				} catch (ParseException e) {
-//					throw new IOException(e);
-//				}
-//				return cached.before(lastMod);
-//			}
+			String cached = logoCache.optString(callsign, null);
+			if(cached != null)
+				return !cached.equals(logo.optString("md5"));
 		}
 		return true;
 	}
