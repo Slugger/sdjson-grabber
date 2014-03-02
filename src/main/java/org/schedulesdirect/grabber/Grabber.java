@@ -15,6 +15,7 @@
  */
 package org.schedulesdirect.grabber;
 
+import static org.schedulesdirect.grabber.GrabberReturnCodes.*;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -106,7 +107,7 @@ public final class Grabber {
 	/**
 	 * Location of the saved command line args; saves typing on the command line
 	 */
-	static public final File OPTS_FILE = new File(new File(System.getProperty("user.home")), ".sd4j.opts");
+	static public final File OPTS_FILE = new File(new File(System.getProperty("user.home")), ".sdjson.properties");
 	/**
 	 * Name of the file holding user data in the zip
 	 */
@@ -664,41 +665,41 @@ public final class Grabber {
 	 * @param args The command line args
 	 * @throws IOException Thrown on any unexpected IO error
 	 * @throws InvalidCredentialsException Thrown if the login attempt to Schedules Direct failed
-	 * @return 0 on success, non-zero otherwise; typically one would return this value back to the OS level caller
+	 * @return {@link GrabberReturnCodes#OK OK} on success, one of the other constants in the interface otherwise; typically one would return this value back to the OS level caller
+	 * @see GrabberReturnCodes
 	 */
 	public int execute(String[] args) throws IOException, InvalidCredentialsException {
 		if(!parseArgs(args))
-			return 1;
+			return ARGS_PARSE_ERR;
 		else if(parser.getParsedCommand() == null) {
 			parser.usage();
-			return 1;
+			return NO_CMD_ERR;
 		}
 		NetworkEpgClient clnt = null;
 		try {
 			if(!parser.getParsedCommand().equals("audit")) {
 				try {
-					clnt = new NetworkEpgClient(globalOpts.getUsername(), globalOpts.getPassword(), globalOpts.getUserAgent(), globalOpts.getUrl().toString(), true);
+					clnt = new NetworkEpgClient(globalOpts.getUsername(), globalOpts.getPassword(), globalOpts.getUserAgent(), globalOpts.getUrl().toString(), true, factory);
 					LOG.debug(String.format("Client details: %s", clnt.getUserAgent()));
 				} catch(ServiceOfflineException e) {
-					LOG.error("Web service is offline!");
-					LOG.error("Please try again later.");
-					return 1;
+					LOG.error("Web service is offline!  Please try again later.");
+					return SERVICE_OFFLINE_ERR;
 				}
 			}
 			action = Action.valueOf(parser.getParsedCommand().toUpperCase());
-			int rc = 1;
+			int rc = CMD_FAILED_ERR;
 			switch(action) {
 				case LIST:
 					if(!listOpts.isHelp()) {
 						listLineups(clnt);
-						rc = 0;
+						rc = OK;
 					} else
 						parser.usage(action.toString().toLowerCase());
 					break;
 				case GRAB:
 					if(!grabOpts.isHelp()) {
 						updateZip(clnt);
-						rc = 0;
+						rc = OK;
 					} else
 						parser.usage(action.toString().toLowerCase());
 					break;
@@ -710,21 +711,21 @@ public final class Grabber {
 					break;
 				case DELETE: 
 					if(!delOpts.isHelp())
-						rc = removeHeadend(clnt) ? 0 : 1;
+						rc = removeHeadend(clnt) ? OK : CMD_FAILED_ERR;
 					else
 						parser.usage(action.toString().toLowerCase());
 					break;
 				case INFO: 
 					if(!infoOpts.isHelp()) {
 						dumpAccountInfo(clnt);
-						rc = 0;
+						rc = OK;
 					} else
 						parser.usage(action.toString().toLowerCase());
 					break;
 				case SEARCH:
 					if(!searchOpts.isHelp()) {
 						listLineupsForZip(clnt);
-						rc = 0;
+						rc = OK;
 					} else
 						parser.usage(action.toString().toLowerCase());
 					break;
@@ -743,7 +744,7 @@ public final class Grabber {
 				case LISTMSGS:
 					if(!listMsgsOpts.isHelp()) {
 						listAllMessages(clnt);
-						rc = 0;
+						rc = OK;
 					} else
 						parser.usage(action.toString().toLowerCase());
 					break;
@@ -751,7 +752,7 @@ public final class Grabber {
 					if(!delMsgsOpts.isHelp()) {
 						if(deleteMessages(clnt, clnt.getUserStatus().getSystemMessages()) < delMsgsOpts.getIds().size())
 							deleteMessages(clnt, clnt.getUserStatus().getUserMessages());
-						rc = 0;
+						rc = OK;
 					} else
 						parser.usage(action.toString().toLowerCase());
 					break;
@@ -760,7 +761,7 @@ public final class Grabber {
 		} catch(ParameterException e) {
 			System.out.println(e.getMessage());
 			parser.usage();
-			return 1;
+			return ARGS_PARSE_ERR;
 		} catch(JSONException e) {
 			throw new RuntimeException(e);
 		} finally {
@@ -807,7 +808,7 @@ public final class Grabber {
 	
 	public static void main(String[] args) throws Exception {
 		int rc = new Grabber(new JsonRequestFactory()).execute(args);
-		if(rc != 0)
+		if(rc != OK)
 			System.exit(rc);
 	}
 }
