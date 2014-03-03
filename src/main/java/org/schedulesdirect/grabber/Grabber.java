@@ -730,17 +730,14 @@ public final class Grabber {
 						parser.usage(action.toString().toLowerCase());
 					break;
 				case AUDIT:
-					throw new UnsupportedOperationException("Not implemented");
-//					if(!auditOpts.isHelp()) {
-//						Auditor a = new Auditor(auditOpts);
-//						a.run();
-//						if(a.isFailed()) {
-//							LOG.error("Auditor failed!");
-//							return 1;
-//						}
-//					} else
-//						parser.usage(action.toString().toLowerCase());
-//					break;
+					if(!auditOpts.isHelp()) {
+						Auditor a = new Auditor(auditOpts);
+						a.run();
+						if(!a.isFailed())
+							rc = OK;
+					} else
+						parser.usage(action.toString().toLowerCase());
+					break;
 				case LISTMSGS:
 					if(!listMsgsOpts.isHelp()) {
 						listAllMessages(clnt);
@@ -783,6 +780,7 @@ public final class Grabber {
 					}
 					removeUnusedPrograms(target);
 				}
+				target.close();
 				if(action == Action.GRAB && !grabOpts.isHelp())
 					LOG.info(String.format("Created '%s' successfully! [%dms]", target, System.currentTimeMillis() - start));
 			}

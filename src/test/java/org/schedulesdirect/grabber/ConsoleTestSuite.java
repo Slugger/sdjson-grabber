@@ -23,7 +23,7 @@ import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-public abstract class ConsoleTest {
+public abstract class ConsoleTestSuite {
 	static {
 		Path cwd = Paths.get(System.getProperty("user.dir"));
 		Path stdout = Paths.get(cwd.toString(), String.format("%s.stdout", new SimpleDateFormat("yyyyMMddHHmmss").format(new Date())));
