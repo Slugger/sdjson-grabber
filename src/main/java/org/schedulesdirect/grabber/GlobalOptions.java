@@ -1,5 +1,5 @@
 /*
- *      Copyright 2013 Battams, Derek
+ *      Copyright 2013-2014 Battams, Derek
  *       
  *       Licensed under the Apache License, Version 2.0 (the "License");
  *       you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 
 import org.apache.log4j.Level;
+import org.schedulesdirect.api.Config;
 import org.schedulesdirect.grabber.converters.LevelConverter;
 import org.schedulesdirect.grabber.converters.UrlConverter;
 import org.schedulesdirect.grabber.validators.MinMaxThreadsValidator;
@@ -35,7 +36,7 @@ class GlobalOptions {
 	static private final URL DEFAULT_URL;
 	static {
 		try {
-			DEFAULT_URL = new URL("https://data2.schedulesdirect.org");
+			DEFAULT_URL = new URL(Config.DEFAULT_BASE_URL);
 		} catch (MalformedURLException e) {
 			throw new RuntimeException(e);
 		}
