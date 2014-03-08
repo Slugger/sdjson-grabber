@@ -34,6 +34,7 @@ import org.schedulesdirect.api.NetworkEpgClient;
 import org.schedulesdirect.api.Program;
 import org.schedulesdirect.api.RestNouns;
 import org.schedulesdirect.api.ZipEpgClient;
+import org.schedulesdirect.api.exception.InvalidJsonObjectException;
 import org.schedulesdirect.api.json.IJsonRequestFactory;
 import org.schedulesdirect.api.json.JsonRequest;
 import org.schedulesdirect.api.utils.JsonResponseUtils;
@@ -82,17 +83,18 @@ class ProgramTask implements Runnable {
 					Path p = vfs.getPath("programs", String.format("%s.txt", o.getString("programID")));
 					Files.write(p, o.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
 				} else
-					LOG.warn("Error received for Program: " + o.optString("message", "<NO_MSG>"));
+					throw new InvalidJsonObjectException("Error received for Program", o.toString(3));
 			}
-		} catch (IOException e) {
+		} catch(IOException e) {
 			Grabber.failedTask = true;
-			LOG.error("IOError receiving program data; filling in empty program info!", e);
+			LOG.error("IOError receiving program data; filling in empty program info for non-existent program ids!", e);
 			try {
 				JSONArray ids = this.req;
 				for(int i = 0; i < ids.length(); ++i) {
 					String id = ids.getString(i);
 					Path p = vfs.getPath("programs", String.format("%s.txt", id));
-					Files.write(p, Program.EMPTY_PROGRAM.getBytes(ZipEpgClient.ZIP_CHARSET));
+					if(!Files.exists(p))
+						Files.write(p, Program.EMPTY_PROGRAM.getBytes(ZipEpgClient.ZIP_CHARSET));
 				}
 			} catch(Exception x) {
 				LOG.error("Unexpected error!", x);

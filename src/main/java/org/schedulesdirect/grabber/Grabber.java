@@ -94,7 +94,7 @@ import com.beust.jcommander.ParameterException;
  * 
  * <p>To run this app, be sure to download the standalone jar from the project site then execute:</p>
  * 
- * <code>java -jar sdjson.jar</code>
+ * <code>java -jar sdjson-grabber.x.yyyyyyyy.z.jar</code>
  * 
  * <p>That command alone will dump all of the command line arguments required for operation.</p>
  * 
@@ -129,6 +129,23 @@ public final class Grabber {
 	 * Has a download task failed?
 	 */
 	static volatile boolean failedTask = false;
+	
+	/**
+	 * Version of the grabber app
+	 */
+	static public final String GRABBER_VERSION = initVersion();
+	static private String initVersion() {
+		try(InputStream grabberProps = Grabber.class.getResourceAsStream("/sdjson-grabber.properties")) {
+			if(grabberProps != null) {
+				Properties p = new Properties();
+				p.load(grabberProps);
+				return p.getProperty("version");
+			}			
+		} catch(IOException e) {
+			return "unknown";
+		}
+		return "unknown";
+	}
 
 	/**
 	 * Supported actions for this app
@@ -190,8 +207,14 @@ public final class Grabber {
 				savedPwd = props.getProperty("password");
 			}
 			globalOpts = new GlobalOptions(savedUser, savedPwd);
-			parser = new JCommander(globalOpts);
-			parser.setProgramName("sdjson");
+			parser = new JCommander(globalOpts) {
+				@Override
+				public void usage() {
+					JCommander.getConsole().println(String.format("sdjson-grabber v%s/sdjson-api v%s", GRABBER_VERSION, Config.API_VERSION));
+					super.usage();
+				}
+			};
+			parser.setProgramName("sdjson-grabber");
 			grabOpts = new CommandGrab();
 			parser.addCommand("grab", grabOpts);
 			listOpts = new CommandList();
