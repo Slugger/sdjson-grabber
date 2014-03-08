@@ -90,7 +90,8 @@ class LogoTask implements Runnable {
 							}
 						LOG.info(String.format("LogoTask COMPLETE for %s [%dms]", callsign, System.currentTimeMillis() - start));
 					}
-				}
+				} else
+					LOG.warn(String.format("Received error response for logo '%s': %s", callsign, resp.getStatusLine()));
 			} catch(IOException | URISyntaxException e) {
 				LOG.error(String.format("IOError grabbing logo for %s", callsign), e);
 			}

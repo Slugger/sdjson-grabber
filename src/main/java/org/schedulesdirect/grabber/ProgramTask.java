@@ -81,7 +81,8 @@ class ProgramTask implements Runnable {
 				if(!JsonResponseUtils.isErrorResponse(o)) {
 					Path p = vfs.getPath("programs", String.format("%s.txt", o.getString("programID")));
 					Files.write(p, o.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
-				}
+				} else
+					LOG.warn("Error received for Program: " + o.optString("message", "<NO_MSG>"));
 			}
 		} catch (IOException e) {
 			Grabber.failedTask = true;

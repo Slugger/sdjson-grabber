@@ -98,7 +98,8 @@ class ScheduleTask implements Runnable {
 
 					Path p = vfs.getPath("schedules", String.format("%s.txt", o.getString("stationID")));
 					Files.write(p, o.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET));
-				}
+				} else
+					LOG.warn("Error received for Schedule: " + o.optString("message", "<NO_MSG>"));
 			}
 		} catch(JSONException e) {
 			Grabber.failedTask = true;
