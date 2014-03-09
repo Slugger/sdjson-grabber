@@ -166,7 +166,7 @@ public final class Grabber {
 	
 	static public final Logger getDisplay() { return Logger.getLogger(LOGGER_APP_DISPLAY); }
 	
-	private Collection<String> ignoreList = new ArrayList<String>();
+	private Collection<String> stationList = null;
 	private Set<String> activeProgIds = new HashSet<String>();
 	private JCommander parser;
 	private GlobalOptions globalOpts;
@@ -357,14 +357,15 @@ public final class Grabber {
 	}
 
 	@SuppressWarnings("unchecked")
-	private void buildIgnoreList() {
-		File ignoreFile = grabOpts.getIgnoreFile();
-		if(ignoreFile != null && ignoreFile.canRead()) {
+	private void buildStationList() {
+		File stationFile = grabOpts.getStationFile();
+		if(stationFile != null && stationFile.canRead()) {
+			stationList = new ArrayList<String>();
 			try {
-				ignoreList = (List<String>)FileUtils.readLines(ignoreFile, ZipEpgClient.ZIP_CHARSET.toString());
+				stationList = (List<String>)FileUtils.readLines(stationFile, ZipEpgClient.ZIP_CHARSET.toString());
 			} catch (IOException e) {
 				LOG.error("IOError", e);
-				ignoreList.clear();
+				stationList.clear();
 			}
 		}
 	}
@@ -453,7 +454,7 @@ public final class Grabber {
 				LOG.error("Received error response when requesting lineup data!");
 			
 			for(Lineup l : clnt.getLineups()) {
-				buildIgnoreList();
+				buildStationList();
 				JSONObject o = new JSONObject(factory.get(JsonRequest.Action.GET, l.getUri(), clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null));
 				Files.write(vfs.getPath("/maps", ZipEpgClient.scrubFileName(String.format("%s.txt", l.getId()))), o.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET));
 				JSONArray stations = o.getJSONArray("stations");
@@ -461,8 +462,8 @@ public final class Grabber {
 				for(int i = 0; i < stations.length(); ++i) {
 					JSONObject obj = stations.getJSONObject(i);
 					String sid = obj.getString("stationID");
-					if(ignoreList.contains(sid))
-						LOG.debug(String.format("Skipped %s; found in ignore list", sid));
+					if(stationList != null && !stationList.contains(sid))
+						LOG.debug(String.format("Skipped %s; not listed in station file", sid));
 					else if(completedListings.add(sid)) {
 						ids.put(sid);
 						if(!grabOpts.isNoLogos()) {
@@ -659,7 +660,7 @@ public final class Grabber {
 			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 				String id = file.getName(file.getNameCount() - 1).toString();
 				id = id.substring(0, id.indexOf('.'));
-				if(ignoreList.contains(id)) {
+				if(stationList != null && !stationList.contains(id)) {
 					if(LOG.isDebugEnabled())
 						LOG.debug(String.format("CacheCleaner: Remove '%s'", id));
 					Files.delete(file);

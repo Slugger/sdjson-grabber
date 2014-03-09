@@ -1,5 +1,5 @@
 /*
- *      Copyright 2013 Battams, Derek
+ *      Copyright 2013-2014 Battams, Derek
  *       
  *       Licensed under the Apache License, Version 2.0 (the "License");
  *       you may not use this file except in compliance with the License.
@@ -40,8 +40,8 @@ class CommandGrab {
 	@Parameter(names = "--purge-cache", description = "Cleanup stale entries in the cache")
 	private boolean purge;
 	
-	@Parameter(names = "--ignore-stations", description = "File containing list of station ids not to download")
-	private File ignoreFile = null;
+	@Parameter(names = "--stations", description = "File containing list of only station ids to download")
+	private File stationFile = null;
 	
 	@Parameter(names = "--target", description = "File name to write the EPG data to")
 	private File target = new File("sdjson.epg");
@@ -91,8 +91,8 @@ class CommandGrab {
 	/**
 	 * @return the ignoreFile
 	 */
-	public File getIgnoreFile() {
-		return ignoreFile;
+	public File getStationFile() {
+		return stationFile;
 	}
 
 	/**
