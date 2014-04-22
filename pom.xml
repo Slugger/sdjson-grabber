@@ -14,13 +14,6 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
-  <distributionManagement>
-    <repository>
-      <id>sourceforge</id>
-      <url>scpexe://dbattams,sdjson@shell.sf.net/home/frs/project/sdjson/repo</url>
-    </repository>
-  </distributionManagement>
-  
   <build>
     <extensions>
       <extension>
@@ -35,6 +28,16 @@
         <filtering>true</filtering>
       </resource>
     </resources>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+	      <artifactId>maven-deploy-plugin</artifactId>
+	      <configuration>
+	        <skip>true</skip>
+	      </configuration>
+	    </plugin>
+      </plugins>
+    </pluginManagement>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -65,6 +68,39 @@
           </execution>
         </executions>
       </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <version>1.7</version>
+        <dependencies>
+            <dependency>
+                <groupId>org.apache.ant</groupId>
+                <artifactId>ant-jsch</artifactId>
+                <version>1.9.2</version>
+                <scope>compile</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.jcraft</groupId>
+                <artifactId>jsch</artifactId>
+                <version>0.1.51</version>
+                <scope>compile</scope>
+            </dependency>
+        </dependencies>
+        <executions>
+          <execution>
+            <id>sdjson-deploy</id>
+            <phase>deploy</phase>
+            <configuration>
+              <target>
+                <ant antfile="${basedir}/build.xml" />
+              </target>
+            </configuration>
+            <goals>
+              <goal>run</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
   
@@ -84,7 +120,7 @@
     <dependency>
     	<groupId>org.schedulesdirect</groupId>
     	<artifactId>sdjson-api</artifactId>
-    	<version>0.20131021.0-SNAPSHOT</version>
+    	<version>0.20131021.1-SNAPSHOT</version>
     </dependency>
     <dependency>
     	<groupId>log4j</groupId>

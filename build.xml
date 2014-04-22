@@ -1,0 +1,37 @@
+<project name="sdjson-grabber" default="echo">
+<!--
+      Copyright 2014 Battams, Derek
+       
+       Licensed under the Apache License, Version 2.0 (the "License");
+       you may not use this file except in compliance with the License.
+       You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+       Unless required by applicable law or agreed to in writing, software
+       distributed under the License is distributed on an "AS IS" BASIS,
+       WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+       See the License for the specific language governing permissions and
+       limitations under the License.
+-->
+	<property name="snapshot.version" value="0.20131021.x" />
+	<target name="init">
+		<condition property="isSnapshot">
+			<matches pattern="-SNAPSHOT$" string="${project.version}" />
+		</condition>
+	  	<tstamp>
+	  		<format property="deploy.date" pattern="yyyyMMddHHmmss" />
+	  	</tstamp>
+	</target>
+	<target name="upload-snapshot" if="isSnapshot">
+		<echo message="Doing snapshot!" />
+		<scp file="target/sdjson-grabber-${project.version}.jar" remoteTofile="dbattams,sdjson@web.sf.net:/home/project-web/sdjson/htdocs/snapshots/${snapshot.version}/sdjson-grabber-${project.version}.${deploy.date}.jar" keyfile="${user.home}/.ssh/id_dsa" />
+	</target>
+	<target name="upload-release" unless="isSnapshot">
+		<echo message="Doing release!" />
+		<scp file="target/sdjson-grabber-${project.version}.jar" todir="dbattams,sdjson@web.sf.net:/home/frs/project/sdjson/" keyfile="${user.home}/.ssh/id_dsa" />
+	</target>
+	<target name="echo" depends="init,upload-snapshot,upload-release">
+		<echo message="All done." />
+	</target>
+</project>
