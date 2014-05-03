@@ -28,6 +28,7 @@ import java.nio.file.StandardCopyOption;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.HttpResponse;
+import org.apache.http.StatusLine;
 import org.apache.http.client.fluent.Request;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -80,7 +81,8 @@ class LogoTask implements Runnable {
 			long start = System.currentTimeMillis();
 			try {
 				HttpResponse resp = Request.Get(url.toURI()).execute().returnResponse();
-				if(resp.getStatusLine().getStatusCode() == 200) {
+				StatusLine status = resp.getStatusLine();
+				if(status.getStatusCode() == 200) {
 					try(InputStream ins = resp.getEntity().getContent()) {
 						Path p = vfs.getPath("logos", String.format("%s.%s", callsign, ext));
 						Files.copy(ins, p, StandardCopyOption.REPLACE_EXISTING);
@@ -90,12 +92,24 @@ class LogoTask implements Runnable {
 							}
 						LOG.info(String.format("LogoTask COMPLETE for %s [%dms]", callsign, System.currentTimeMillis() - start));
 					}
-				} else
+				} else {
 					LOG.warn(String.format("Received error response for logo '%s': %s", callsign, resp.getStatusLine()));
+					if(status.getStatusCode() >= 400 && status.getStatusCode() <= 499)
+						removeStaleLogo();
+				}
 			} catch(IOException | URISyntaxException e) {
 				LOG.error(String.format("IOError grabbing logo for %s", callsign), e);
 			}
 		} else if(LOG.isDebugEnabled())
 			LOG.debug(String.format("No logo info for %s", callsign));
+	}
+	
+	protected void removeStaleLogo() throws IOException {
+		Path p = vfs.getPath("logos", String.format("%s.%s", callsign, ext));
+		if(Files.deleteIfExists(p)) {
+			synchronized(cache) {
+				cache.remove(callsign);
+			}
+		}		
 	}
 }
