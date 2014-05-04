@@ -120,7 +120,7 @@
     <dependency>
     	<groupId>org.schedulesdirect</groupId>
     	<artifactId>sdjson-api</artifactId>
-    	<version>0.20131021.1</version>
+    	<version>0.20131021.2-SNAPSHOT</version>
     </dependency>
     <dependency>
     	<groupId>log4j</groupId>
