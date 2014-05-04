@@ -20,6 +20,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
+import java.net.URL;
 import java.util.Queue;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -74,6 +75,11 @@ public final class MockJsonRequestFactory implements IJsonRequestFactory {
 			throw new RuntimeException(e);
 		}
 		add(req);
+	}
+
+	@Override
+	public JsonRequest get(Action action, URL url) {
+		throw new UnsupportedOperationException("Mock does not implement this method!");
 	}
 
 }
