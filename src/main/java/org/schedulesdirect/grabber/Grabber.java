@@ -404,10 +404,7 @@ public final class Grabber {
 			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 				String name = file.getFileName().toString();
 				name = name.substring(0, name.lastIndexOf('.'));
-				if(Files.size(file) > 0)
-					cachedSeriesIds.add(name);
-				else
-					Files.delete(file);
+				cachedSeriesIds.add(name);
 				return FileVisitResult.CONTINUE;
 			}
 
