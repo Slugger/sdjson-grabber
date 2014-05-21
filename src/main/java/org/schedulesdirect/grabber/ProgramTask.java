@@ -23,6 +23,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
@@ -30,6 +31,7 @@ import org.apache.commons.logging.LogFactory;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.schedulesdirect.api.ApiResponse;
 import org.schedulesdirect.api.NetworkEpgClient;
 import org.schedulesdirect.api.Program;
 import org.schedulesdirect.api.RestNouns;
@@ -52,6 +54,8 @@ class ProgramTask implements Runnable {
 	private FileSystem vfs;
 	private NetworkEpgClient clnt;
 	private IJsonRequestFactory factory;
+	private Set<String> seriesIds;
+	private String targetDir;
 	
 	/**
 	 * Constructor
@@ -59,14 +63,18 @@ class ProgramTask implements Runnable {
 	 * @param vfs The name of the vfs being written to
 	 * @param clnt The EpgClient to be used to download the request
 	 * @param factory The JsonRequestFactory implementation to use
+	 * @param seriesIds The master collection of series info object ids that needs to be collected
+	 * @param targetDir The directory where collected programs should be stored 
 	 */
-	public ProgramTask(Collection<String> progIds, FileSystem vfs, NetworkEpgClient clnt, IJsonRequestFactory factory) throws JSONException {
+	public ProgramTask(Collection<String> progIds, FileSystem vfs, NetworkEpgClient clnt, IJsonRequestFactory factory, Set<String> seriesIds, String targetDir) throws JSONException {
 		this.req = new JSONArray();
 		for(String id : progIds)
 			req.put(id);
 		this.vfs = vfs;
 		this.clnt = clnt;
 		this.factory = factory;
+		this.seriesIds = seriesIds;
+		this.targetDir = targetDir;
 	}
 
 	@SuppressWarnings("unchecked")
@@ -79,10 +87,15 @@ class ProgramTask implements Runnable {
 		try (InputStream ins = req.submitForInputStream(input)) {
 			for(String data : (List<String>)IOUtils.readLines(ins)) {
 				JSONObject o = new JSONObject(data);
+				String id = o.optString("programID", "<unknown>");
 				if(!JsonResponseUtils.isErrorResponse(o)) {
-					Path p = vfs.getPath("programs", String.format("%s.txt", o.getString("programID")));
+					if(id.startsWith("EP"))
+						seriesIds.add(Program.convertToSeriesId(id));
+					Path p = vfs.getPath(targetDir, String.format("%s.txt", id));
 					Files.write(p, o.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
-				} else
+				} else if(JsonResponseUtils.getErrorCode(o) == ApiResponse.INVALID_PROGID)
+					LOG.warn(String.format("Missing program object: %s", id));
+				else
 					throw new InvalidJsonObjectException("Error received for Program", o.toString(3));
 			}
 		} catch(IOException e) {
@@ -92,7 +105,7 @@ class ProgramTask implements Runnable {
 				JSONArray ids = this.req;
 				for(int i = 0; i < ids.length(); ++i) {
 					String id = ids.getString(i);
-					Path p = vfs.getPath("programs", String.format("%s.txt", id));
+					Path p = vfs.getPath(targetDir, String.format("%s.txt", id));
 					if(!Files.exists(p))
 						Files.write(p, Program.EMPTY_PROGRAM.getBytes(ZipEpgClient.ZIP_CHARSET));
 				}

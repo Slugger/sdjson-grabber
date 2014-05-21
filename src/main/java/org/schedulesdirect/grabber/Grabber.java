@@ -15,7 +15,12 @@
  */
 package org.schedulesdirect.grabber;
 
-import static org.schedulesdirect.grabber.GrabberReturnCodes.*;
+import static org.schedulesdirect.grabber.GrabberReturnCodes.ARGS_PARSE_ERR;
+import static org.schedulesdirect.grabber.GrabberReturnCodes.CMD_FAILED_ERR;
+import static org.schedulesdirect.grabber.GrabberReturnCodes.NO_CMD_ERR;
+import static org.schedulesdirect.grabber.GrabberReturnCodes.OK;
+import static org.schedulesdirect.grabber.GrabberReturnCodes.SERVICE_OFFLINE_ERR;
+
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -40,6 +45,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
@@ -165,7 +171,7 @@ public final class Grabber {
 	}
 	
 	static public final Logger getDisplay() { return Logger.getLogger(LOGGER_APP_DISPLAY); }
-	
+
 	private Collection<String> stationList = null;
 	private Set<String> activeProgIds = new HashSet<String>();
 	private JCommander parser;
@@ -185,6 +191,8 @@ public final class Grabber {
 	private Action action;
 	private IJsonRequestFactory factory;
 	private JSONObject logoCache;
+	private Set<String> cachedSeriesIds;
+	private Set<String> missingSeriesIds;
 	
 	private ThreadPoolExecutor pool;
 
@@ -385,12 +393,45 @@ public final class Grabber {
 		};
 	}
 
+	private void loadSeriesInfoIds(Path root) throws IOException {
+		Files.walkFileTree(root, new FileVisitor<Path>() {
+			@Override
+			public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+				return FileVisitResult.SKIP_SUBTREE;
+			}
+
+			@Override
+			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+				String name = file.getFileName().toString();
+				name = name.substring(0, name.lastIndexOf('.'));
+				if(Files.size(file) > 0)
+					cachedSeriesIds.add(name);
+				else
+					Files.delete(file);
+				return FileVisitResult.CONTINUE;
+			}
+
+			@Override
+			public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+				throw exc;
+			}
+
+			@Override
+			public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+				if(exc != null)
+					throw exc;
+				return FileVisitResult.CONTINUE;
+			}
+		});
+	}
+	
 	private void updateZip(NetworkEpgClient clnt) throws IOException, JSONException {
 		Set<String> completedListings = new HashSet<String>();
 		LOG.debug(String.format("Using %d worker threads", globalOpts.getMaxThreads()));
 		pool = createThreadPoolExecutor(); 
 		start = System.currentTimeMillis();
 		File dest = grabOpts.getTarget();
+		cachedSeriesIds = new HashSet<String>();
 		boolean rmDest = false;
 		if(dest.exists()) {
 			ZipEpgClient zipClnt = null;
@@ -446,6 +487,11 @@ public final class Grabber {
 				logoCache = new JSONObject(cacheData);
 			} else
 				logoCache = new JSONObject();
+			Path seriesInfo = vfs.getPath("/seriesInfo/");
+			if(!Files.isDirectory(seriesInfo))
+				Files.createDirectories(seriesInfo);
+			loadSeriesInfoIds(seriesInfo);
+			missingSeriesIds = Collections.synchronizedSet(new HashSet<String>());
 			
 			JSONObject resp = new JSONObject(factory.get(JsonRequest.Action.GET, RestNouns.LINEUPS, clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null));
 			if(!JsonResponseUtils.isErrorResponse(resp))
@@ -509,18 +555,33 @@ public final class Grabber {
 			for(String progId : dirtyPrograms) {
 				progIds.add(progId);
 				if(progIds.size() == grabOpts.getMaxProgChunk()) {
-					pool.execute(new ProgramTask(progIds, vfs, clnt, factory));
+					pool.execute(new ProgramTask(progIds, vfs, clnt, factory, missingSeriesIds, "programs"));
 					progIds.clear();
 				}
 			}
 			if(progIds.size() > 0)
-				pool.execute(new ProgramTask(progIds, vfs, clnt, factory));
+				pool.execute(new ProgramTask(progIds, vfs, clnt, factory, missingSeriesIds, "programs"));
 			pool.shutdown();
 			try {
 				LOG.debug("Waiting for ProgramExecutor to terminate...");
-				if(pool.awaitTermination(15, TimeUnit.MINUTES))
+				if(pool.awaitTermination(15, TimeUnit.MINUTES)) {
 					LOG.debug("ProgramExecutor: Terminated successfully.");
-				else {
+					Iterator<String> itr = missingSeriesIds.iterator();
+					while(itr.hasNext()) {
+						String id = itr.next();
+						if(cachedSeriesIds.contains(id))
+							itr.remove();
+					}
+					if(missingSeriesIds.size() > 0) {
+						LOG.info(String.format("Grabbing %d series info programs!", missingSeriesIds.size()));
+						try {
+							new ProgramTask(missingSeriesIds, vfs, clnt, factory, missingSeriesIds, "seriesInfo").run();
+						} catch(RuntimeException e) {
+							LOG.error("SeriesInfo task failed!", e);
+							Grabber.failedTask = true;
+						}
+					}
+				} else {
 					failedTask = true;
 					LOG.warn("ProgramExecutor: Termination timed out; some tasks probably didn't finish properly!");
 				}
