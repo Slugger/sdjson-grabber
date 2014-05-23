@@ -118,6 +118,12 @@ public final class Grabber {
 	 * Name of the file holding user data in the zip
 	 */
 	static public final String USER_DATA = "user.txt";
+	
+	/**
+	 * Name of the file holding missing series info ids that need to be retried
+	 */
+	static public final String SERIES_INFO_DATA = "seriesInfo.txt";
+	
 	/**
 	 * Max age of an airing before it's considered expired
 	 */
@@ -422,6 +428,15 @@ public final class Grabber {
 		});
 	}
 	
+	private void loadRetryIds(Path p) {
+		try {
+			for(String s : Files.readAllLines(p, ZipEpgClient.ZIP_CHARSET))
+				missingSeriesIds.add(s.trim());
+		} catch (IOException e) {
+			LOG.warn("IOError", e);
+		}
+	}
+	
 	private void updateZip(NetworkEpgClient clnt) throws IOException, JSONException {
 		Set<String> completedListings = new HashSet<String>();
 		LOG.debug(String.format("Using %d worker threads", globalOpts.getMaxThreads()));
@@ -489,6 +504,7 @@ public final class Grabber {
 				Files.createDirectories(seriesInfo);
 			loadSeriesInfoIds(seriesInfo);
 			missingSeriesIds = Collections.synchronizedSet(new HashSet<String>());
+			loadRetryIds(vfs.getPath(SERIES_INFO_DATA));
 			
 			JSONObject resp = new JSONObject(factory.get(JsonRequest.Action.GET, RestNouns.LINEUPS, clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null));
 			if(!JsonResponseUtils.isErrorResponse(resp))
@@ -552,12 +568,12 @@ public final class Grabber {
 			for(String progId : dirtyPrograms) {
 				progIds.add(progId);
 				if(progIds.size() == grabOpts.getMaxProgChunk()) {
-					pool.execute(new ProgramTask(progIds, vfs, clnt, factory, missingSeriesIds, "programs"));
+					pool.execute(new ProgramTask(progIds, vfs, clnt, factory, missingSeriesIds, "programs", null));
 					progIds.clear();
 				}
 			}
 			if(progIds.size() > 0)
-				pool.execute(new ProgramTask(progIds, vfs, clnt, factory, missingSeriesIds, "programs"));
+				pool.execute(new ProgramTask(progIds, vfs, clnt, factory, missingSeriesIds, "programs", null));
 			pool.shutdown();
 			try {
 				LOG.debug("Waiting for ProgramExecutor to terminate...");
@@ -571,12 +587,20 @@ public final class Grabber {
 					}
 					if(missingSeriesIds.size() > 0) {
 						LOG.info(String.format("Grabbing %d series info programs!", missingSeriesIds.size()));
+						Set<String> retrySet = new HashSet<>();
 						try {
-							new ProgramTask(missingSeriesIds, vfs, clnt, factory, missingSeriesIds, "seriesInfo").run();
+							new ProgramTask(missingSeriesIds, vfs, clnt, factory, missingSeriesIds, "seriesInfo", retrySet).run();
 						} catch(RuntimeException e) {
 							LOG.error("SeriesInfo task failed!", e);
 							Grabber.failedTask = true;
 						}
+						if(retrySet.size() > 0) {
+							StringBuilder sb = new StringBuilder();
+							for(String id : retrySet)
+								sb.append(id + "\n");
+							Files.write(vfs.getPath(SERIES_INFO_DATA), sb.toString().getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
+						} else
+							Files.delete(vfs.getPath(SERIES_INFO_DATA));
 					}
 				} else {
 					failedTask = true;
