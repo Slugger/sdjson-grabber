@@ -572,12 +572,12 @@ public final class Grabber {
 			for(String progId : dirtyPrograms) {
 				progIds.add(progId);
 				if(progIds.size() == grabOpts.getMaxProgChunk()) {
-					pool.execute(new ProgramTask(progIds, vfs, clnt, factory, missingSeriesIds, "programs", null));
+					pool.execute(new ProgramTask(progIds, vfs, clnt, factory, missingSeriesIds, "programs", null, false));
 					progIds.clear();
 				}
 			}
 			if(progIds.size() > 0)
-				pool.execute(new ProgramTask(progIds, vfs, clnt, factory, missingSeriesIds, "programs", null));
+				pool.execute(new ProgramTask(progIds, vfs, clnt, factory, missingSeriesIds, "programs", null, false));
 			pool.shutdown();
 			try {
 				LOG.debug("Waiting for ProgramExecutor to terminate...");
@@ -593,7 +593,7 @@ public final class Grabber {
 						LOG.info(String.format("Grabbing %d series info programs!", missingSeriesIds.size()));
 						Set<String> retrySet = new HashSet<>();
 						try {
-							new ProgramTask(missingSeriesIds, vfs, clnt, factory, missingSeriesIds, "seriesInfo", retrySet).run();
+							new ProgramTask(missingSeriesIds, vfs, clnt, factory, missingSeriesIds, "seriesInfo", retrySet, true).run();
 						} catch(RuntimeException e) {
 							LOG.error("SeriesInfo task failed!", e);
 							Grabber.failedTask = true;

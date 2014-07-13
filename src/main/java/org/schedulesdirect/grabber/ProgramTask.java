@@ -57,7 +57,8 @@ class ProgramTask implements Runnable {
 	private Set<String> seriesIds;
 	private String targetDir;
 	private Set<String> retrySet;
-	
+	private boolean logMissingAtDebug;
+		
 	/**
 	 * Constructor
 	 * @param req The array of program ids to be downloaded
@@ -68,7 +69,7 @@ class ProgramTask implements Runnable {
 	 * @param targetDir The directory where collected programs should be stored
 	 * @param retrySet A set of ids that were not available on the server side; should be retried again later 
 	 */
-	public ProgramTask(Collection<String> progIds, FileSystem vfs, NetworkEpgClient clnt, IJsonRequestFactory factory, Set<String> seriesIds, String targetDir, Set<String> retrySet) throws JSONException {
+	public ProgramTask(Collection<String> progIds, FileSystem vfs, NetworkEpgClient clnt, IJsonRequestFactory factory, Set<String> seriesIds, String targetDir, Set<String> retrySet, boolean logMissingAtDebug) throws JSONException {
 		this.req = new JSONArray();
 		for(String id : progIds)
 			req.put(id);
@@ -78,6 +79,7 @@ class ProgramTask implements Runnable {
 		this.seriesIds = seriesIds;
 		this.targetDir = targetDir;
 		this.retrySet = retrySet;
+		this.logMissingAtDebug = logMissingAtDebug;
 	}
 
 	@SuppressWarnings("unchecked")
@@ -97,7 +99,11 @@ class ProgramTask implements Runnable {
 					Path p = vfs.getPath(targetDir, String.format("%s.txt", id));
 					Files.write(p, o.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
 				} else if(JsonResponseUtils.getErrorCode(o) == ApiResponse.INVALID_PROGID) {
-					LOG.warn(String.format("Missing program object: %s", id));
+					String msg = String.format("Missing program object: %s", id);
+					if(!logMissingAtDebug)
+						LOG.warn(msg);
+					else
+						LOG.debug(msg);
 					if(retrySet != null)
 						retrySet.add(id);
 				} else
