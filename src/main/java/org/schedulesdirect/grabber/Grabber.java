@@ -437,7 +437,7 @@ public final class Grabber {
 			for(String s : Files.readAllLines(p, ZipEpgClient.ZIP_CHARSET))
 				missingSeriesIds.add(s.trim());
 		} catch (IOException e) {
-			LOG.warn("IOError", e);
+			LOG.debug("IOError", e);
 		}
 	}
 	
