@@ -326,8 +326,12 @@ public final class Grabber {
 		Logger display = getDisplay();
 		display.info(String.format("Available lineups for user '%s'%n", globalOpts.getUsername()));
 		display.info(String.format("%-20s Description%n==============================================================================%n", "Lineup ID"));
-		for(Lineup l : clnt.getLineups())
-			display.info(String.format("%-20s %s %s%n", l.getUri().substring(l.getUri().lastIndexOf('/') + 1), l.getName(), l.getLocation()));
+		Lineup[] lineups = clnt.getLineups();
+		if(lineups != null && lineups.length > 0)
+			for(Lineup l : lineups)
+				display.info(String.format("%-20s %s %s%n", l.getUri().substring(l.getUri().lastIndexOf('/') + 1), l.getName(), l.getLocation()));
+		else
+			display.info("No lineups registered to account!");
 	}
 	
 	private void listLineupsForZip(EpgClient clnt) throws IOException {
