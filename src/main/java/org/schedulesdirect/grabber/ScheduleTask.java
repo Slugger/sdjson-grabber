@@ -93,7 +93,7 @@ class ScheduleTask implements Runnable {
 							} else
 								LOG.debug(String.format("Expired airing discovered and ignored! [%s; %s; %s]", progId, o.getString("stationID"), end));
 						} catch(JSONException e) {
-							LOG.warn("JSONException", e);
+							LOG.warn(String.format("JSONException [%s]", o.optString("stationID", "unknown")), e);
 						}
 					}
 

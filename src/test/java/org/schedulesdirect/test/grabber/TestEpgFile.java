@@ -40,7 +40,7 @@ public class TestEpgFile {
 		p.toFile().deleteOnExit();
 		Files.delete(p);
 		try {
-			vfs = FileSystems.newFileSystem(new URI(String.format("jar:file:%s", p)), Collections.singletonMap("create", "true"));
+			vfs = FileSystems.newFileSystem(new URI(String.format("jar:%s", p.toFile().toURI())), Collections.singletonMap("create", "true"));
 		} catch (URISyntaxException e) {
 			throw new RuntimeException(e);
 		}
