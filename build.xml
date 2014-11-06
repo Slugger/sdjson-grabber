@@ -14,7 +14,7 @@
        See the License for the specific language governing permissions and
        limitations under the License.
 -->
-	<property name="snapshot.version" value="0.20131021.x" />
+	<property name="snapshot.version" value="0.20140530.x" />
 	<target name="init">
 		<condition property="isSnapshot">
 			<matches pattern="-SNAPSHOT$" string="${project.version}" />

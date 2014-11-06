@@ -4,7 +4,7 @@
 
   <groupId>org.schedulesdirect</groupId>
   <artifactId>sdjson-grabber</artifactId>
-  <version>0.20131021.3-SNAPSHOT</version>
+  <version>0.20140530.0</version>
   <packaging>jar</packaging>
 
   <name>sdjson-grabber</name>
@@ -130,7 +130,7 @@
     <dependency>
     	<groupId>org.schedulesdirect</groupId>
     	<artifactId>sdjson-api</artifactId>
-    	<version>0.20131021.2</version>
+    	<version>0.20140530.0-SNAPSHOT</version>
     </dependency>
     <dependency>
     	<groupId>log4j</groupId>

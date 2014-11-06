@@ -29,6 +29,7 @@ import org.apache.commons.logging.LogFactory;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.schedulesdirect.api.ApiResponse;
 import org.schedulesdirect.api.NetworkEpgClient;
 import org.schedulesdirect.api.RestNouns;
 import org.schedulesdirect.api.ZipEpgClient;
@@ -74,8 +75,13 @@ class ScheduleTask implements Runnable {
 	public void run() {
 		long start = System.currentTimeMillis();
 		JsonRequest req = factory.get(JsonRequest.Action.POST, RestNouns.SCHEDULES, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
-		JSONObject data = new JSONObject();
-		data.put("request", this.req);
+		JSONArray data = new JSONArray();
+		for(int i = 0; i < this.req.length(); ++i) {
+			JSONObject o = new JSONObject();
+			o.put("stationID", this.req.getString(i));
+			o.put("days", 13);
+			data.put(o);
+		}
 		try(InputStream ins = req.submitForInputStream(data)) {
 			for(String input : (List<String>)IOUtils.readLines(ins)) {
 				JSONObject o = new JSONObject(input);
@@ -99,7 +105,9 @@ class ScheduleTask implements Runnable {
 
 					Path p = vfs.getPath("schedules", String.format("%s.txt", o.getString("stationID")));
 					Files.write(p, o.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET));
-				} else
+				} else if(JsonResponseUtils.getErrorCode(o) == ApiResponse.SCHEDULE_QUEUED)
+					LOG.warn(String.format("StationID %s is queued server side and will be downloaded on next EPG update!", o.getString("stationID")));
+				else
 					throw new InvalidJsonObjectException("Error received for schedule", o.toString(3));
 			}
 		} catch(JSONException e) {

@@ -87,9 +87,7 @@ class ProgramTask implements Runnable {
 	public void run() {
 		long start = System.currentTimeMillis();
 		JsonRequest req = factory.get(JsonRequest.Action.POST, RestNouns.PROGRAMS, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
-		JSONObject input = new JSONObject();
-		input.put("request", this.req);
-		try (InputStream ins = req.submitForInputStream(input)) {
+		try (InputStream ins = req.submitForInputStream(this.req)) {
 			for(String data : (List<String>)IOUtils.readLines(ins)) {
 				JSONObject o = new JSONObject(data);
 				String id = o.optString("programID", "<unknown>");
