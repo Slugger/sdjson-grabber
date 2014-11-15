@@ -598,13 +598,14 @@ public final class Grabber {
 							LOG.error("SeriesInfo task failed!", e);
 							Grabber.failedTask = true;
 						}
+						Path seriesInfoData = vfs.getPath(SERIES_INFO_DATA);
 						if(retrySet.size() > 0) {
 							StringBuilder sb = new StringBuilder();
 							for(String id : retrySet)
 								sb.append(id + "\n");
-							Files.write(vfs.getPath(SERIES_INFO_DATA), sb.toString().getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
-						} else
-							Files.delete(vfs.getPath(SERIES_INFO_DATA));
+							Files.write(seriesInfoData, sb.toString().getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
+						} else if(Files.exists(seriesInfoData))
+							Files.delete(seriesInfoData);
 					}
 				} else {
 					failedTask = true;
