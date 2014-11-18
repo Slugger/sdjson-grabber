@@ -96,7 +96,7 @@ class ProgramTask implements Runnable {
 						seriesIds.add(Program.convertToSeriesId(id));
 					Path p = vfs.getPath(targetDir, String.format("%s.txt", id));
 					Files.write(p, o.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
-				} else if(JsonResponseUtils.getErrorCode(o) == ApiResponse.INVALID_PROGID) {
+				} else if(JsonResponseUtils.getErrorCode(o) == ApiResponse.INVALID_PROGID || JsonResponseUtils.getErrorCode(o) == ApiResponse.PROGRAMID_QUEUED) {
 					String msg = String.format("Missing program object: %s", id);
 					if(!logMissingAtDebug)
 						LOG.warn(msg);
