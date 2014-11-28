@@ -486,8 +486,8 @@ public final class Grabber {
 			Path lineups = vfs.getPath("lineups.txt");
 			Files.deleteIfExists(lineups);
 			Path scheds = vfs.getPath("/schedules/");
-			PathUtils.removeDirectory(scheds);
-			Files.createDirectory(scheds);
+			if(!Files.isDirectory(scheds))
+				Files.createDirectory(scheds);
 			Path maps = vfs.getPath("/maps/");
 			PathUtils.removeDirectory(maps);
 			Files.createDirectory(maps);

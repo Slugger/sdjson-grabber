@@ -57,7 +57,7 @@ class ScheduleTask implements Runnable {
 		boolean rc = false;
 		try(Reader r = Files.newBufferedReader(cache, ZipEpgClient.ZIP_CHARSET)) {
 			JSONObject o = new JSONObject(IOUtils.toString(r));
-			rc = !src.getString("md5").equals(o.getString("md5"));
+			rc = !src.getString("md5").equals(o.getJSONObject("metadata").getString("md5"));
 		} catch(IOException e) {
 			LOG.error("IOError reading schedule cache!", e);
 			rc = true;
@@ -90,12 +90,17 @@ class ScheduleTask implements Runnable {
 	@Override
 	public void run() {
 		long start = System.currentTimeMillis();
-		fetchStations(getStaleStationIds());
-		LOG.info(String.format("ScheduleTask completed in %dms [%d stations]", System.currentTimeMillis() - start, this.req.length()));
+		Collection<String> staleIds = getStaleStationIds();
+		fetchStations(staleIds);
+		LOG.info(String.format("ScheduleTask completed in %dms [TOTAL: %d, FETCH: %d, CACHE: %d]", System.currentTimeMillis() - start, this.req.length(), staleIds.size(), this.req.length() - staleIds.size()));
 	}
 
 	@SuppressWarnings("unchecked")
 	protected void fetchStations(Collection<String> ids) {
+		if(ids == null || ids.size() == 0) {
+			LOG.info("No stale schedules identified; skipping schedule download!");
+			return;
+		}
 		JsonRequest req = factory.get(JsonRequest.Action.POST, RestNouns.SCHEDULES, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
 		JSONArray data = new JSONArray();
 		Iterator<String> itr = ids.iterator();
@@ -170,7 +175,7 @@ class ScheduleTask implements Runnable {
 			data.put(o);
 		}
 		try {
-			JSONObject result = new JSONObject(req.submitForJson(data));
+			JSONObject result = new JSONObject(req.submitForJson(data, true));
 			if(!JsonResponseUtils.isErrorResponse(result)) {
 				Iterator<?> itr = result.keys();
 				while(itr.hasNext()) {
@@ -180,9 +185,8 @@ class ScheduleTask implements Runnable {
 						staleIds.add(k);
 						if(LOG.isDebugEnabled())
 							LOG.debug(String.format("Station %s queued for refresh!", k));
-					} else if(LOG.isDebugEnabled()) {
+					} else if(LOG.isDebugEnabled())
 						LOG.debug(String.format("Station %s is unchanged on the server; skipping it!", k));
-					}
 				}
 			}
 		} catch(Throwable t) {
