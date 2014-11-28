@@ -21,6 +21,7 @@ import java.io.Reader;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashSet;
@@ -132,7 +133,7 @@ class ScheduleTask implements Runnable {
 					}
 
 					Path p = vfs.getPath("schedules", String.format("%s.txt", o.getString("stationID")));
-					Files.write(p, o.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET));
+					Files.write(p, o.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
 				} else if(JsonResponseUtils.getErrorCode(o) == ApiResponse.SCHEDULE_QUEUED)
 					LOG.warn(String.format("StationID %s is queued server side and will be downloaded on next EPG update!", o.getString("stationID")));
 				else
