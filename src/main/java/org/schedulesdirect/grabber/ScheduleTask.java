@@ -17,11 +17,16 @@ package org.schedulesdirect.grabber;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.Reader;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.Date;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
@@ -48,6 +53,18 @@ import org.schedulesdirect.api.utils.JsonResponseUtils;
 class ScheduleTask implements Runnable {
 	static private final Log LOG = LogFactory.getLog(ScheduleTask.class);
 	
+	static private boolean isScheduleStale(JSONObject src, Path cache) {
+		boolean rc = false;
+		try(Reader r = Files.newBufferedReader(cache, ZipEpgClient.ZIP_CHARSET)) {
+			JSONObject o = new JSONObject(IOUtils.toString(r));
+			rc = !src.getString("md5").equals(o.getString("md5"));
+		} catch(IOException e) {
+			LOG.error("IOError reading schedule cache!", e);
+			rc = true;
+		}
+		return rc;
+	}
+	
 	private JSONArray req;
 	private FileSystem vfs;
 	private NetworkEpgClient clnt;
@@ -70,15 +87,21 @@ class ScheduleTask implements Runnable {
 		this.factory = factory;
 	}
 
-	@SuppressWarnings("unchecked")
 	@Override
 	public void run() {
 		long start = System.currentTimeMillis();
+		fetchStations(getStaleStationIds());
+		LOG.info(String.format("ScheduleTask completed in %dms [%d stations]", System.currentTimeMillis() - start, this.req.length()));
+	}
+
+	@SuppressWarnings("unchecked")
+	protected void fetchStations(Collection<String> ids) {
 		JsonRequest req = factory.get(JsonRequest.Action.POST, RestNouns.SCHEDULES, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
 		JSONArray data = new JSONArray();
-		for(int i = 0; i < this.req.length(); ++i) {
+		Iterator<String> itr = ids.iterator();
+		while(itr.hasNext()) {
 			JSONObject o = new JSONObject();
-			o.put("stationID", this.req.getString(i));
+			o.put("stationID", itr.next());
 			o.put("days", 13);
 			data.put(o);
 		}
@@ -118,9 +141,9 @@ class ScheduleTask implements Runnable {
 			Grabber.failedTask = true;
 			LOG.error("IOError receiving schedule data! Filling cache with empty schedules!", e);
 			try {
-				JSONArray ids = this.req;
-				for(int i = 0; i < ids.length(); ++i) {
-					String id = ids.getString(i);
+				JSONArray schedIds = this.req;
+				for(int i = 0; i < schedIds.length(); ++i) {
+					String id = schedIds.getString(i);
 					Path p = vfs.getPath("schedules", String.format("%s.txt", id));
 					if(!Files.exists(p)) {
 						JSONObject emptySched = new JSONObject();
@@ -134,6 +157,38 @@ class ScheduleTask implements Runnable {
 				throw new RuntimeException(x);
 			}
 		}
-		LOG.info(String.format("ScheduleTask completed in %dms [%d stations]", System.currentTimeMillis() - start, this.req.length()));
+	}
+	
+	protected Set<String> getStaleStationIds() {
+		Set<String> staleIds = new HashSet<>();
+		JsonRequest req = factory.get(JsonRequest.Action.POST, RestNouns.SCHEDULE_MD5S, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
+		JSONArray data = new JSONArray();
+		for(int i = 0; i < this.req.length(); ++i) {
+			JSONObject o = new JSONObject();
+			o.put("stationID", this.req.getString(i));
+			o.put("days", 13);
+			data.put(o);
+		}
+		try {
+			JSONObject result = new JSONObject(req.submitForJson(data));
+			if(!JsonResponseUtils.isErrorResponse(result)) {
+				Iterator<?> itr = result.keys();
+				while(itr.hasNext()) {
+					String k = itr.next().toString();
+					Path p = vfs.getPath("schedules", String.format("%s.txt", k));
+					if(!Files.exists(p) || isScheduleStale(result.getJSONArray(k).getJSONObject(0), p)) {
+						staleIds.add(k);
+						if(LOG.isDebugEnabled())
+							LOG.debug(String.format("Station %s queued for refresh!", k));
+					} else if(LOG.isDebugEnabled()) {
+						LOG.debug(String.format("Station %s is unchanged on the server; skipping it!", k));
+					}
+				}
+			}
+		} catch(Throwable t) {
+			Grabber.failedTask = true;
+			LOG.error("Error processing cache; returning partial stale list!", t);
+		}
+		return staleIds;
 	}
 }
