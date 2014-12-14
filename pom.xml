@@ -4,7 +4,7 @@
 
   <groupId>org.schedulesdirect</groupId>
   <artifactId>sdjson-grabber</artifactId>
-  <version>0.20140530.1-SNAPSHOT</version>
+  <version>0.20140530.1</version>
   <packaging>jar</packaging>
 
   <name>sdjson-grabber</name>
