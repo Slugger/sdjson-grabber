@@ -1,5 +1,5 @@
 /*
- *      Copyright 2012-2014 Battams, Derek
+ *      Copyright 2012-2015 Battams, Derek
  *       
  *       Licensed under the Apache License, Version 2.0 (the "License");
  *       you may not use this file except in compliance with the License.
@@ -16,20 +16,17 @@
 package org.schedulesdirect.grabber;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.Reader;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.json.JSONArray;
@@ -54,15 +51,10 @@ import org.schedulesdirect.api.utils.JsonResponseUtils;
 class ScheduleTask implements Runnable {
 	static private final Log LOG = LogFactory.getLog(ScheduleTask.class);
 	
-	static private boolean isScheduleStale(JSONObject src, Path cache) {
-		boolean rc = false;
-		try(Reader r = Files.newBufferedReader(cache, ZipEpgClient.ZIP_CHARSET)) {
-			JSONObject o = new JSONObject(IOUtils.toString(r));
-			rc = !src.getString("md5").equals(o.getJSONObject("metadata").getString("md5"));
-		} catch(IOException e) {
-			LOG.error("IOError reading schedule cache!", e);
-			rc = true;
-		}
+	static private boolean isScheduleStale(JSONObject src, JSONObject cache) {
+		boolean rc = true;
+		if(cache != null)
+			rc = !cache.getString("md5").equals(src.getString("md5"));
 		return rc;
 	}
 	
@@ -91,29 +83,33 @@ class ScheduleTask implements Runnable {
 	@Override
 	public void run() {
 		long start = System.currentTimeMillis();
-		Collection<String> staleIds = getStaleStationIds();
+		Map<String, Collection<String>> staleIds = getStaleStationIds();
 		fetchStations(staleIds);
 		LOG.info(String.format("ScheduleTask completed in %dms [TOTAL: %d, FETCH: %d, CACHE: %d]", System.currentTimeMillis() - start, this.req.length(), staleIds.size(), this.req.length() - staleIds.size()));
 	}
 
-	@SuppressWarnings("unchecked")
-	protected void fetchStations(Collection<String> ids) {
+	protected void fetchStations(Map<String, Collection<String>> ids) {
 		if(ids == null || ids.size() == 0) {
 			LOG.info("No stale schedules identified; skipping schedule download!");
 			return;
 		}
 		JsonRequest req = factory.get(JsonRequest.Action.POST, RestNouns.SCHEDULES, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
 		JSONArray data = new JSONArray();
-		Iterator<String> itr = ids.iterator();
-		while(itr.hasNext()) {
+		Iterator<String> idItr = ids.keySet().iterator();
+		while(idItr.hasNext()) {
+			String id = idItr.next();
 			JSONObject o = new JSONObject();
-			o.put("stationID", itr.next());
-			o.put("days", 13);
+			o.put("stationID", id);
+			Collection<String> dates = new ArrayList<>();
+			for(String date : ids.get(id))
+				dates.add(date);
+			o.put("date", dates);
 			data.put(o);
 		}
-		try(InputStream ins = req.submitForInputStream(data)) {
-			for(String input : (List<String>)IOUtils.readLines(ins)) {
-				JSONObject o = new JSONObject(input);
+		try {
+			JSONArray resp = new JSONArray(req.submitForJson(data, true));
+			for(int i = 0; i < resp.length(); ++i) {
+				JSONObject o = resp.getJSONObject(i);
 				if(!JsonResponseUtils.isErrorResponse(o)) {
 					JSONArray sched = o.getJSONArray("programs");
 					Date expiry = new Date(System.currentTimeMillis() - Grabber.MAX_AIRING_AGE);
@@ -165,29 +161,42 @@ class ScheduleTask implements Runnable {
 		}
 	}
 	
-	protected Set<String> getStaleStationIds() {
-		Set<String> staleIds = new HashSet<>();
+	protected Map<String, Collection<String>> getStaleStationIds() {
+		Map<String, Collection<String>> staleIds = new HashMap<>();
 		JsonRequest req = factory.get(JsonRequest.Action.POST, RestNouns.SCHEDULE_MD5S, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
 		JSONArray data = new JSONArray();
 		for(int i = 0; i < this.req.length(); ++i) {
 			JSONObject o = new JSONObject();
 			o.put("stationID", this.req.getString(i));
-			o.put("days", 13);
 			data.put(o);
 		}
 		try {
 			JSONObject result = new JSONObject(req.submitForJson(data, true));
 			if(!JsonResponseUtils.isErrorResponse(result)) {
-				Iterator<?> itr = result.keys();
-				while(itr.hasNext()) {
-					String k = itr.next().toString();
-					Path p = vfs.getPath("schedules", String.format("%s.txt", k));
-					if(!Files.exists(p) || isScheduleStale(result.getJSONArray(k).getJSONObject(0), p)) {
-						staleIds.add(k);
-						if(LOG.isDebugEnabled())
-							LOG.debug(String.format("Station %s queued for refresh!", k));
-					} else if(LOG.isDebugEnabled())
-						LOG.debug(String.format("Station %s is unchanged on the server; skipping it!", k));
+				Iterator<?> idItr = result.keys();
+				while(idItr.hasNext()) {
+					String stationId = idItr.next().toString();
+					boolean schedFileExists = Files.exists(vfs.getPath("schedules", String.format("%s.txt", stationId)));
+					Path cachedMd5File = vfs.getPath("md5s", String.format("%s.txt", stationId));
+					JSONObject cachedMd5s = Files.exists(cachedMd5File) ? new JSONObject(new String(Files.readAllBytes(cachedMd5File), ZipEpgClient.ZIP_CHARSET.toString())) : new JSONObject(); 
+					JSONObject stationInfo = result.getJSONObject(stationId);
+					Iterator<?> dateItr = stationInfo.keys();
+					while(dateItr.hasNext()) {
+						String date = dateItr.next().toString();
+						JSONObject dateInfo = stationInfo.getJSONObject(date);
+						if(!schedFileExists || isScheduleStale(dateInfo, cachedMd5s.optJSONObject(date))) {
+							Collection<String> dates = staleIds.get(stationId);
+							if(dates == null) {
+								dates = new ArrayList<String>();
+								staleIds.put(stationId, dates);
+							}
+							dates.add(date);
+							if(LOG.isDebugEnabled())
+								LOG.debug(String.format("Station %s/%s queued for refresh!", stationId, date));
+						} else if(LOG.isDebugEnabled())
+							LOG.debug(String.format("Station %s is unchanged on the server; skipping it!", stationId));
+					}
+					Files.write(cachedMd5File, stationInfo.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
 				}
 			}
 		} catch(Throwable t) {

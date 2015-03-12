@@ -1,5 +1,5 @@
 /*
- *      Copyright 2012-2014 Battams, Derek
+ *      Copyright 2012-2015 Battams, Derek
  *       
  *       Licensed under the Apache License, Version 2.0 (the "License");
  *       you may not use this file except in compliance with the License.
@@ -16,16 +16,13 @@
 package org.schedulesdirect.grabber;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Collection;
-import java.util.List;
 import java.util.Set;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.json.JSONArray;
@@ -82,14 +79,14 @@ class ProgramTask implements Runnable {
 		this.logMissingAtDebug = logMissingAtDebug;
 	}
 
-	@SuppressWarnings("unchecked")
 	@Override
 	public void run() {
 		long start = System.currentTimeMillis();
 		JsonRequest req = factory.get(JsonRequest.Action.POST, RestNouns.PROGRAMS, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
-		try (InputStream ins = req.submitForInputStream(this.req)) {
-			for(String data : (List<String>)IOUtils.readLines(ins)) {
-				JSONObject o = new JSONObject(data);
+		try {
+			JSONArray resp = new JSONArray(req.submitForJson(this.req));
+			for(int i = 0; i < resp.length(); ++i) {
+				JSONObject o = resp.getJSONObject(i);
 				String id = o.optString("programID", "<unknown>");
 				if(!JsonResponseUtils.isErrorResponse(o)) {
 					if(id.startsWith("EP"))

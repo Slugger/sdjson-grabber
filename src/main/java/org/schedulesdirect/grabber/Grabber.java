@@ -1,5 +1,5 @@
 /*
- *      Copyright 2012-2014 Battams, Derek
+ *      Copyright 2012-2015 Battams, Derek
  *       
  *       Licensed under the Apache License, Version 2.0 (the "License");
  *       you may not use this file except in compliance with the License.
@@ -497,6 +497,9 @@ public final class Grabber {
 			Path logos = vfs.getPath("/logos/");
 			if(!Files.isDirectory(logos))
 				Files.createDirectory(logos);
+			Path md5s = vfs.getPath("/md5s/");
+			if(!Files.isDirectory(md5s))
+				Files.createDirectory(md5s);
 			Path cache = vfs.getPath(LOGO_CACHE);
 			if(Files.exists(cache)) {
 				String cacheData = new String(Files.readAllBytes(cache), ZipEpgClient.ZIP_CHARSET);
@@ -520,11 +523,13 @@ public final class Grabber {
 				buildStationList();
 				JSONObject o = new JSONObject(factory.get(JsonRequest.Action.GET, l.getUri(), clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null));
 				Files.write(vfs.getPath("/maps", ZipEpgClient.scrubFileName(String.format("%s.txt", l.getId()))), o.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET));
-				JSONArray stations = o.getJSONArray("stations");
+				JSONObject stations = o.getJSONObject("stations");
 				JSONArray ids = new JSONArray();
-				for(int i = 0; i < stations.length(); ++i) {
-					JSONObject obj = stations.getJSONObject(i);
-					String sid = obj.getString("stationID");
+				@SuppressWarnings("unchecked")
+				Iterator<String> keys = stations.keys();
+				while(keys.hasNext()) {
+					String sid = keys.next();
+					JSONObject obj = stations.getJSONObject(sid);					
 					if(stationList != null && !stationList.contains(sid))
 						LOG.debug(String.format("Skipped %s; not listed in station file", sid));
 					else if(completedListings.add(sid)) {
@@ -540,6 +545,7 @@ public final class Grabber {
 						}
 					} else
 						LOG.debug(String.format("Skipped %s; already downloaded.", sid));
+					pool.setMaximumPoolSize(5); // Processing these new schedules takes all kinds of memory!
 					if(ids.length() == grabOpts.getMaxSchedChunk()) {
 						pool.execute(new ScheduleTask(ids, vfs, clnt, progCache, factory));
 						ids = new JSONArray();
@@ -564,6 +570,7 @@ public final class Grabber {
 			Files.write(cache, logoCache.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
 
 			pool = createThreadPoolExecutor();
+			pool.setMaximumPoolSize(5); // Again, we've got memory problems
 			String[] dirtyPrograms = progCache.getDirtyIds();
 			progCache.markAllClean();
 			progCache = null;
