@@ -44,6 +44,7 @@ versionFile {
 
 group = 'org.schedulesdirect'
 version = versioning.info.display
+sourceCompatibility = '1.7'
 mainClassName = 'org.schedulesdirect.grabber.Grabber'
 
 repositories {
