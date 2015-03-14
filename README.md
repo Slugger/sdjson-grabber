@@ -1,9 +1,6 @@
 # sdjson-grabber
 Java 7 grabber application for the Schedules Direct JSON data service.
 
-## Development currently in `release/20141201` branch
-The `master` branch represents the last release of API 20140530, which still uses maven to build and references the old SourceFoge infrastructure.  All development is currently happening in the `release/20141201` branch.  That branch will be merged into `master` at some point and the current development version will again be done from `master`.  This is a transition phase while the move from maven to gradle is being worked on.
-
 ## Back to Github
 Starting with the API 20141201 release the grabber project has relocated to github.  The old SourceForge site will not be updated.  Wiki pages, etc. are in the proces of being migrated.
 
