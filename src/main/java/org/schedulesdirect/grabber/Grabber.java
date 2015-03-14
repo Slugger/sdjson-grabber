@@ -523,13 +523,11 @@ public final class Grabber {
 				buildStationList();
 				JSONObject o = new JSONObject(factory.get(JsonRequest.Action.GET, l.getUri(), clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null));
 				Files.write(vfs.getPath("/maps", ZipEpgClient.scrubFileName(String.format("%s.txt", l.getId()))), o.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET));
-				JSONObject stations = o.getJSONObject("stations");
+				JSONArray stations = o.getJSONArray("stations");
 				JSONArray ids = new JSONArray();
-				@SuppressWarnings("unchecked")
-				Iterator<String> keys = stations.keys();
-				while(keys.hasNext()) {
-					String sid = keys.next();
-					JSONObject obj = stations.getJSONObject(sid);					
+				for(int i = 0; i < stations.length(); ++i) {
+					JSONObject obj = stations.getJSONObject(i);					
+					String sid = obj.getString("stationID");
 					if(stationList != null && !stationList.contains(sid))
 						LOG.debug(String.format("Skipped %s; not listed in station file", sid));
 					else if(completedListings.add(sid)) {

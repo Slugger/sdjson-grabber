@@ -1,5 +1,5 @@
 /*
- *      Copyright 2012-2014 Battams, Derek
+ *      Copyright 2012-2015 Battams, Derek
  *       
  *       Licensed under the Apache License, Version 2.0 (the "License");
  *       you may not use this file except in compliance with the License.
@@ -107,7 +107,7 @@ public final class Auditor {
 					boolean failed = false;
 					String id = getStationIdFromFileName(file.getFileName().toString());
 					JSONObject station = stations.get(id);
-					StringBuilder msg = new StringBuilder(String.format("Inspecting %s (%s)... ", station.getString("callsign"), id));
+					StringBuilder msg = new StringBuilder(String.format("Inspecting %s (%s)... ", station != null ? station.getString("callsign") : String.format("[UNKNOWN: %s]", id), id));
 					String input;
 					try(InputStream ins = Files.newInputStream(file)) {
 						input = IOUtils.toString(ins, ZipEpgClient.ZIP_CHARSET.toString());
