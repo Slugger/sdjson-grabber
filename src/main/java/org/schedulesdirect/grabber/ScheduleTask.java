@@ -107,7 +107,7 @@ class ScheduleTask implements Runnable {
 			data.put(o);
 		}
 		try {
-			JSONArray resp = new JSONArray(req.submitForJson(data, true));
+			JSONArray resp = new JSONArray(req.submitForJson(data));
 			for(int i = 0; i < resp.length(); ++i) {
 				JSONObject o = resp.getJSONObject(i);
 				if(!JsonResponseUtils.isErrorResponse(o)) {
@@ -171,7 +171,7 @@ class ScheduleTask implements Runnable {
 			data.put(o);
 		}
 		try {
-			JSONObject result = new JSONObject(req.submitForJson(data, true));
+			JSONObject result = new JSONObject(req.submitForJson(data));
 			if(!JsonResponseUtils.isErrorResponse(result)) {
 				Iterator<?> idItr = result.keys();
 				while(idItr.hasNext()) {
