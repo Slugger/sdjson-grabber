@@ -22,9 +22,12 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.logging.Log;
@@ -50,6 +53,27 @@ import org.schedulesdirect.api.utils.JsonResponseUtils;
  */
 class ScheduleTask implements Runnable {
 	static private final Log LOG = LogFactory.getLog(ScheduleTask.class);
+	
+	static final Map<String, List<JSONObject>> FULL_SCHEDS = new HashMap<>();
+	
+	static void commit(FileSystem vfs) throws IOException {
+		Iterator<String> itr = FULL_SCHEDS.keySet().iterator();
+		while(itr.hasNext()) {
+			String id = itr.next();
+			JSONObject sched = new JSONObject();
+			List<JSONObject> airs = FULL_SCHEDS.get(id);
+			Collections.sort(airs, new Comparator<JSONObject>() {
+				@Override
+				public int compare(JSONObject arg0, JSONObject arg1) {
+					return arg0.getString("airDateTime").compareTo(arg1.getString("airDateTime"));
+				}	
+			});
+			sched.put("programs", airs);
+			Path p = vfs.getPath("schedules", String.format("%s.txt", id));
+			Files.write(p, sched.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);		
+		}
+		FULL_SCHEDS.clear();
+	}
 	
 	static private boolean isScheduleStale(JSONObject src, JSONObject cache) {
 		boolean rc = true;
@@ -112,6 +136,7 @@ class ScheduleTask implements Runnable {
 				JSONObject o = resp.getJSONObject(i);
 				if(!JsonResponseUtils.isErrorResponse(o)) {
 					JSONArray sched = o.getJSONArray("programs");
+					String schedId = o.getString("stationID");
 					Date expiry = new Date(System.currentTimeMillis() - Grabber.MAX_AIRING_AGE);
 					for(int j = 0; j < sched.length(); ++j) {
 						try {
@@ -123,13 +148,18 @@ class ScheduleTask implements Runnable {
 								cache.markIfDirty(progId, md5);
 							} else
 								LOG.debug(String.format("Expired airing discovered and ignored! [%s; %s; %s]", progId, o.getString("stationID"), end));
+							synchronized(ScheduleTask.class) {
+								List<JSONObject> objs = FULL_SCHEDS.get(schedId);
+								if(objs == null) {
+									objs = new ArrayList<JSONObject>();
+									FULL_SCHEDS.put(schedId, objs);
+								}
+								objs.add(airing);
+							}
 						} catch(JSONException e) {
 							LOG.warn(String.format("JSONException [%s]", o.optString("stationID", "unknown")), e);
 						}
 					}
-
-					Path p = vfs.getPath("schedules", String.format("%s.txt", o.getString("stationID")));
-					Files.write(p, o.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
 				} else if(JsonResponseUtils.getErrorCode(o) == ApiResponse.SCHEDULE_QUEUED)
 					LOG.warn(String.format("StationID %s is queued server side and will be downloaded on next EPG update!", o.getString("stationID")));
 				else

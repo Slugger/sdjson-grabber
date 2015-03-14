@@ -533,7 +533,7 @@ public final class Grabber {
 					else if(completedListings.add(sid)) {
 						ids.put(sid);
 						if(!grabOpts.isNoLogos()) {
-							if(logoCacheInvalid(obj, vfs))
+							if(logoCacheInvalid(obj))
 								pool.execute(new LogoTask(obj, vfs, logoCache));
 							else if(LOG.isDebugEnabled())
 								LOG.debug(String.format("Skipped logo for %s; already cached!", obj.optString("callsign", null)));
@@ -566,6 +566,7 @@ public final class Grabber {
 				LOG.warn("SchedLogoExecutor: Termination interrupted); some tasks probably didn't finish properly!");
 			}
 			Files.write(cache, logoCache.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
+			ScheduleTask.commit(vfs);
 
 			pool = createThreadPoolExecutor();
 			pool.setMaximumPoolSize(5); // Again, we've got memory problems
@@ -638,7 +639,7 @@ public final class Grabber {
 		}
 	}
 	
-	private boolean logoCacheInvalid(JSONObject station, FileSystem vfs) throws JSONException, IOException {
+	private boolean logoCacheInvalid(JSONObject station) throws JSONException, IOException {
 		JSONObject logo = station.optJSONObject("logo");
 		if(logo != null) {
 			String callsign = station.getString("callsign");
