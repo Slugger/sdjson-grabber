@@ -29,10 +29,10 @@ import com.beust.jcommander.Parameters;
 @Parameters(commandDescription = "Grab the EPG data")
 class CommandGrab {
 	@Parameter(names = "--max-sched-chunk", description = "Max number of schedules to download at once; change only if told to", validateWith = GrabValidator.class)
-	private int maxSchedChunk = 1000;
+	private int maxSchedChunk = 100;
 	
 	@Parameter(names = "--max-prog-chunk", description = "Max number of programs to download at once; change only if told to", validateWith = GrabValidator.class)
-	private int maxProgChunk = 50000;
+	private int maxProgChunk = 1000;
 	
 	@Parameter(names = "--no-logos", description = "Do not download/update logo files")
 	private boolean noLogos;

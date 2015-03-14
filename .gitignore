@@ -3,3 +3,9 @@ target/
 *.stderr
 *.stdout
 *.epg
+/bin/
+/.gradle/
+/build/
+/.settings/
+/.classpath
+/.project
