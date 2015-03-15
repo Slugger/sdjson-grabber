@@ -36,6 +36,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.schedulesdirect.api.ApiResponse;
+import org.schedulesdirect.api.Config;
 import org.schedulesdirect.api.NetworkEpgClient;
 import org.schedulesdirect.api.RestNouns;
 import org.schedulesdirect.api.ZipEpgClient;
@@ -44,6 +45,8 @@ import org.schedulesdirect.api.json.IJsonRequestFactory;
 import org.schedulesdirect.api.json.JsonRequest;
 import org.schedulesdirect.api.utils.AiringUtils;
 import org.schedulesdirect.api.utils.JsonResponseUtils;
+
+import com.fasterxml.jackson.core.JsonParseException;
 
 /**
  * Download schedules in bulk
@@ -131,7 +134,7 @@ class ScheduleTask implements Runnable {
 			data.put(o);
 		}
 		try {
-			JSONArray resp = new JSONArray(req.submitForJson(data));
+			JSONArray resp = Config.get().getObjectMapper().readValue(req.submitForJson(data), JSONArray.class);
 			for(int i = 0; i < resp.length(); ++i) {
 				JSONObject o = resp.getJSONObject(i);
 				if(!JsonResponseUtils.isErrorResponse(o)) {
@@ -165,7 +168,7 @@ class ScheduleTask implements Runnable {
 				else
 					throw new InvalidJsonObjectException("Error received for schedule", o.toString(3));
 			}
-		} catch(JSONException e) {
+		} catch(JSONException|JsonParseException e) {
 			Grabber.failedTask = true;
 			LOG.fatal("Fatal JSON error!", e);
 			throw new RuntimeException(e);
@@ -201,14 +204,14 @@ class ScheduleTask implements Runnable {
 			data.put(o);
 		}
 		try {
-			JSONObject result = new JSONObject(req.submitForJson(data));
+			JSONObject result = Config.get().getObjectMapper().readValue(req.submitForJson(data), JSONObject.class);
 			if(!JsonResponseUtils.isErrorResponse(result)) {
 				Iterator<?> idItr = result.keys();
 				while(idItr.hasNext()) {
 					String stationId = idItr.next().toString();
 					boolean schedFileExists = Files.exists(vfs.getPath("schedules", String.format("%s.txt", stationId)));
 					Path cachedMd5File = vfs.getPath("md5s", String.format("%s.txt", stationId));
-					JSONObject cachedMd5s = Files.exists(cachedMd5File) ? new JSONObject(new String(Files.readAllBytes(cachedMd5File), ZipEpgClient.ZIP_CHARSET.toString())) : new JSONObject(); 
+					JSONObject cachedMd5s = Files.exists(cachedMd5File) ? Config.get().getObjectMapper().readValue(new String(Files.readAllBytes(cachedMd5File), ZipEpgClient.ZIP_CHARSET.toString()), JSONObject.class) : new JSONObject(); 
 					JSONObject stationInfo = result.getJSONObject(stationId);
 					Iterator<?> dateItr = stationInfo.keys();
 					while(dateItr.hasNext()) {

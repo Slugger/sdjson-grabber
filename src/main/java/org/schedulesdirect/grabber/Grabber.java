@@ -88,6 +88,7 @@ import org.schedulesdirect.grabber.utils.PathUtils;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.ParameterException;
+import com.fasterxml.jackson.core.JsonParseException;
 
 /**
  * An application that will download a Schedules Direct user's lineup data from the servers and generates a zip file in response
@@ -441,7 +442,7 @@ public final class Grabber {
 		}
 	}
 	
-	private void updateZip(NetworkEpgClient clnt) throws IOException, JSONException {
+	private void updateZip(NetworkEpgClient clnt) throws IOException, JSONException, JsonParseException {
 		Set<String> completedListings = new HashSet<String>();
 		LOG.debug(String.format("Using %d worker threads", globalOpts.getMaxThreads()));
 		pool = createThreadPoolExecutor(); 
@@ -503,7 +504,7 @@ public final class Grabber {
 			Path cache = vfs.getPath(LOGO_CACHE);
 			if(Files.exists(cache)) {
 				String cacheData = new String(Files.readAllBytes(cache), ZipEpgClient.ZIP_CHARSET);
-				logoCache = new JSONObject(cacheData);
+				logoCache = Config.get().getObjectMapper().readValue(cacheData, JSONObject.class);
 			} else
 				logoCache = new JSONObject();
 			Path seriesInfo = vfs.getPath("/seriesInfo/");
@@ -513,7 +514,7 @@ public final class Grabber {
 			missingSeriesIds = Collections.synchronizedSet(new HashSet<String>());
 			loadRetryIds(vfs.getPath(SERIES_INFO_DATA));
 			
-			JSONObject resp = new JSONObject(factory.get(JsonRequest.Action.GET, RestNouns.LINEUPS, clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null));
+			JSONObject resp = Config.get().getObjectMapper().readValue(factory.get(JsonRequest.Action.GET, RestNouns.LINEUPS, clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null), JSONObject.class);
 			if(!JsonResponseUtils.isErrorResponse(resp))
 				Files.write(lineups, resp.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET));
 			else
@@ -521,7 +522,7 @@ public final class Grabber {
 			
 			for(Lineup l : clnt.getLineups()) {
 				buildStationList();
-				JSONObject o = new JSONObject(factory.get(JsonRequest.Action.GET, l.getUri(), clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null));
+				JSONObject o = Config.get().getObjectMapper().readValue(factory.get(JsonRequest.Action.GET, l.getUri(), clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null), JSONObject.class);
 				Files.write(vfs.getPath("/maps", ZipEpgClient.scrubFileName(String.format("%s.txt", l.getId()))), o.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET));
 				JSONArray stations = o.getJSONArray("stations");
 				JSONArray ids = new JSONArray();
@@ -627,7 +628,7 @@ public final class Grabber {
 				LOG.error("One or more tasks failed!  Resetting last data refresh timestamp to zero.");
 				SimpleDateFormat fmt = Config.get().getDateTimeFormat();
 				String exp = fmt.format(new Date(0L));
-				JSONObject o = new JSONObject(userData);
+				JSONObject o = Config.get().getObjectMapper().readValue(userData, JSONObject.class);
 				o.put("lastDataUpdate", exp);
 				userData = o.toString(2);
 			}
@@ -666,7 +667,7 @@ public final class Grabber {
 			@Override
 			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 				try(InputStream ins = Files.newInputStream(file)) {
-					JSONArray sched = new JSONObject(IOUtils.toString(ins, ZipEpgClient.ZIP_CHARSET.toString())).getJSONArray("programs");
+					JSONArray sched = Config.get().getObjectMapper().readValue(IOUtils.toString(ins, ZipEpgClient.ZIP_CHARSET.toString()), JSONObject.class).getJSONArray("programs");
 					if(isScheduleExpired(sched)) {
 						Files.delete(file);
 						++i[0];
