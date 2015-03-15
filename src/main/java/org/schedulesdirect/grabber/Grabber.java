@@ -543,7 +543,7 @@ public final class Grabber {
 						}
 					} else
 						LOG.debug(String.format("Skipped %s; already downloaded.", sid));
-					pool.setMaximumPoolSize(5); // Processing these new schedules takes all kinds of memory!
+					//pool.setMaximumPoolSize(5); // Processing these new schedules takes all kinds of memory!
 					if(ids.length() == grabOpts.getMaxSchedChunk()) {
 						pool.execute(new ScheduleTask(ids, vfs, clnt, progCache, factory));
 						ids = new JSONArray();
@@ -569,7 +569,7 @@ public final class Grabber {
 			ScheduleTask.commit(vfs);
 
 			pool = createThreadPoolExecutor();
-			pool.setMaximumPoolSize(5); // Again, we've got memory problems
+			//pool.setMaximumPoolSize(5); // Again, we've got memory problems
 			String[] dirtyPrograms = progCache.getDirtyIds();
 			progCache.markAllClean();
 			progCache = null;
@@ -636,6 +636,9 @@ public final class Grabber {
 			removeIgnoredStations(vfs);
 		} catch (URISyntaxException e1) {
 			throw new RuntimeException(e1);
+		} finally {
+			Runtime rt = Runtime.getRuntime();
+			LOG.info(String.format("MemStats:%n\tFREE: %s%n\tUSED: %s%n\t MAX: %s", FileUtils.byteCountToDisplaySize(rt.freeMemory()), FileUtils.byteCountToDisplaySize(rt.totalMemory()), FileUtils.byteCountToDisplaySize(rt.maxMemory())));
 		}
 	}
 	
