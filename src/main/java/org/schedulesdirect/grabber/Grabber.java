@@ -55,6 +55,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.text.WordUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -174,7 +175,8 @@ public final class Grabber {
 		SEARCH,
 		AUDIT,
 		LISTMSGS,
-		DELMSG
+		DELMSG,
+		AVAILABLE
 	}
 	
 	static public final Logger getDisplay() { return Logger.getLogger(LOGGER_APP_DISPLAY); }
@@ -192,6 +194,7 @@ public final class Grabber {
 	private CommandAudit auditOpts;
 	private CommandListMsgs listMsgsOpts;
 	private CommandDeleteMsgs delMsgsOpts;
+	private CommandAvailable availOpts;
 	private boolean freshZip;
 	private long start;
 	private boolean logosWarned = false;
@@ -248,6 +251,8 @@ public final class Grabber {
 			parser.addCommand("listmsgs", listMsgsOpts);
 			delMsgsOpts = new CommandDeleteMsgs();
 			parser.addCommand("delmsg", delMsgsOpts);
+			availOpts = new CommandAvailable();
+			parser.addCommand("available", availOpts);
 			parser.parse(finalArgs.toArray(new String[finalArgs.size()]));
 			if(globalOpts.isHelp()) {
 				parser.usage();
@@ -874,6 +879,17 @@ public final class Grabber {
 					} else
 						parser.usage(action.toString().toLowerCase());
 					break;
+				case AVAILABLE:
+					if(!availOpts.isHelp()) {
+						String type = availOpts.getType();
+						if(type == null)
+							listAvailableThings(clnt);
+						else
+							listAvailableThings(clnt, type); // TODO: change
+						rc = OK;
+					} else
+						parser.usage(action.toString().toLowerCase());
+					break;
 			}
 			return rc;
 		} catch(ParameterException e) {
@@ -921,6 +937,33 @@ public final class Grabber {
 		}
 	}
 
+	private void listAvailableThings(NetworkEpgClient clnt) throws IOException {
+		getDisplay().info(clnt.getAvailableTypes());
+	}
+	
+	private void listAvailableThings(NetworkEpgClient clnt, String type) throws IOException {
+		type = type.toLowerCase();
+		String json = clnt.getAvailableThings(type);
+		if("countries".equals(type))
+			getDisplay().info(formatCountries(json));
+		else {
+			LOG.warn(String.format("Type not supported; dumping raw response [%s]", type));
+			getDisplay().info(json);
+		}
+	}
+	
+	private String formatCountries(String json) throws IOException {
+		JSONObject resp = Config.get().getObjectMapper().readValue(json, JSONObject.class);
+		String fmt = "%-15s %15s %3s %-40s%n";
+		getDisplay().info("Use 'ISO' value when adding lineups to your account.");
+		getDisplay().info(String.format(fmt, "LOCATION", "", "ISO", "EXAMPLE"));
+		getDisplay().info(String.format("%s%n", StringUtils.repeat('=', 76)));
+		getDisplay().info(String.format("%s%n", "North America"));
+		getDisplay().info(String.format(fmt, "", "United States", "USA", "12345"));
+		getDisplay().info(String.format(fmt, "", "Canada", "CAN", "A0A0A0"));
+		return resp.toString(3);
+	}
+	
 	private void dumpAccountInfo(NetworkEpgClient clnt) throws IOException {
 		getDisplay().info(String.format("%s%n", clnt.getUserStatus().toJson().trim()));
 	}
