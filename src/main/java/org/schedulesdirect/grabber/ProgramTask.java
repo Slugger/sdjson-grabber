@@ -36,7 +36,7 @@ import org.schedulesdirect.api.RestNouns;
 import org.schedulesdirect.api.ZipEpgClient;
 import org.schedulesdirect.api.exception.InvalidJsonObjectException;
 import org.schedulesdirect.api.json.IJsonRequestFactory;
-import org.schedulesdirect.api.json.JsonRequest;
+import org.schedulesdirect.api.json.DefaultJsonRequest;
 import org.schedulesdirect.api.utils.JsonResponseUtils;
 
 import com.fasterxml.jackson.core.JsonParseException;
@@ -85,7 +85,7 @@ class ProgramTask implements Runnable {
 	@Override
 	public void run() {
 		long start = System.currentTimeMillis();
-		JsonRequest req = factory.get(JsonRequest.Action.POST, RestNouns.PROGRAMS, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
+		DefaultJsonRequest req = factory.get(DefaultJsonRequest.Action.POST, RestNouns.PROGRAMS, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
 		try {
 			JSONArray resp = Config.get().getObjectMapper().readValue(req.submitForJson(this.req), JSONArray.class);
 			for(int i = 0; i < resp.length(); ++i) {

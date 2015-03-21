@@ -24,11 +24,11 @@ import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 import org.schedulesdirect.api.ApiResponse;
 import org.schedulesdirect.api.json.IJsonRequestFactory;
-import org.schedulesdirect.api.json.JsonRequest;
+import org.schedulesdirect.api.json.DefaultJsonRequest;
 import org.schedulesdirect.test.grabber.MockJsonRequestFactory;
 
 @RunWith(PowerMockRunner.class)
-@PrepareForTest({ JsonRequest.class })
+@PrepareForTest({ DefaultJsonRequest.class })
 public class GrabberTest extends ConsoleTestSuite {
 	
 	@Test

@@ -81,7 +81,7 @@ import org.schedulesdirect.api.ZipEpgClient;
 import org.schedulesdirect.api.exception.InvalidCredentialsException;
 import org.schedulesdirect.api.exception.ServiceOfflineException;
 import org.schedulesdirect.api.json.IJsonRequestFactory;
-import org.schedulesdirect.api.json.JsonRequest;
+import org.schedulesdirect.api.json.DefaultJsonRequest;
 import org.schedulesdirect.api.json.JsonRequestFactory;
 import org.schedulesdirect.api.utils.AiringUtils;
 import org.schedulesdirect.api.utils.JsonResponseUtils;
@@ -149,11 +149,11 @@ public final class Grabber {
 	 */
 	static public final String GRABBER_VERSION = initVersion();
 	static private String initVersion() {
-		try(InputStream grabberProps = Grabber.class.getResourceAsStream("/sdjson-grabber.properties")) {
+		try(InputStream grabberProps = Grabber.class.getResourceAsStream("/sdjson-grabber-versioning.properties")) {
 			if(grabberProps != null) {
 				Properties p = new Properties();
 				p.load(grabberProps);
-				return p.getProperty("version");
+				return p.getProperty("VERSION_DISPLAY");
 			}			
 		} catch(IOException e) {
 			return "unknown";
@@ -519,7 +519,7 @@ public final class Grabber {
 			missingSeriesIds = Collections.synchronizedSet(new HashSet<String>());
 			loadRetryIds(vfs.getPath(SERIES_INFO_DATA));
 			
-			JSONObject resp = Config.get().getObjectMapper().readValue(factory.get(JsonRequest.Action.GET, RestNouns.LINEUPS, clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null), JSONObject.class);
+			JSONObject resp = Config.get().getObjectMapper().readValue(factory.get(DefaultJsonRequest.Action.GET, RestNouns.LINEUPS, clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null), JSONObject.class);
 			if(!JsonResponseUtils.isErrorResponse(resp))
 				Files.write(lineups, resp.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET));
 			else
@@ -527,7 +527,7 @@ public final class Grabber {
 			
 			for(Lineup l : clnt.getLineups()) {
 				buildStationList();
-				JSONObject o = Config.get().getObjectMapper().readValue(factory.get(JsonRequest.Action.GET, l.getUri(), clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null), JSONObject.class);
+				JSONObject o = Config.get().getObjectMapper().readValue(factory.get(DefaultJsonRequest.Action.GET, l.getUri(), clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null), JSONObject.class);
 				Files.write(vfs.getPath("/maps", ZipEpgClient.scrubFileName(String.format("%s.txt", l.getId()))), o.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET));
 				JSONArray stations = o.getJSONArray("stations");
 				JSONArray ids = new JSONArray();

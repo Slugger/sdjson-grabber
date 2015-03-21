@@ -26,35 +26,35 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import org.schedulesdirect.api.ApiResponse;
 import org.schedulesdirect.api.json.IJsonRequestFactory;
-import org.schedulesdirect.api.json.JsonRequest;
-import org.schedulesdirect.api.json.JsonRequest.Action;
+import org.schedulesdirect.api.json.DefaultJsonRequest;
+import org.schedulesdirect.api.json.DefaultJsonRequest.Action;
 
 public final class MockJsonRequestFactory implements IJsonRequestFactory {
 
-	private Queue<JsonRequest> q = new LinkedBlockingQueue<>();
+	private Queue<DefaultJsonRequest> q = new LinkedBlockingQueue<>();
 	
 	@Override
-	public JsonRequest get(Action action, String resource, String hash,	String userAgent, String baseUrl) {
+	public DefaultJsonRequest get(Action action, String resource, String hash,	String userAgent, String baseUrl) {
 		 return get(action, resource);
 	}
 
 	@Override
-	public JsonRequest get(Action action, String resource) {
+	public DefaultJsonRequest get(Action action, String resource) {
 		if(q.isEmpty())
-			q.add(mock(JsonRequest.class));
+			q.add(mock(DefaultJsonRequest.class));
 		return q.size() == 1 ? q.peek() : q.remove();
 	}
 	
-	public JsonRequest peek() { return q.peek(); }
+	public DefaultJsonRequest peek() { return q.peek(); }
 	
-	public void add(JsonRequest jr) { q.add(jr); }
+	public void add(DefaultJsonRequest jr) { q.add(jr); }
 	
-	public JsonRequest remove() { return q.poll(); }
+	public DefaultJsonRequest remove() { return q.poll(); }
 	
 	public void clear() { q.clear(); }
 	
 	public void addValidTokenResponse() {
-		JsonRequest req = mock(JsonRequest.class);
+		DefaultJsonRequest req = mock(DefaultJsonRequest.class);
 		try {
 			when(req.submitForJson(any(Object.class))).thenReturn("{\"token\":\"12345abcd\"}");
 		} catch (IOException e) {
@@ -68,7 +68,7 @@ public final class MockJsonRequestFactory implements IJsonRequestFactory {
 	}
 	
 	public void addErrorResponse(int code) {
-		JsonRequest req = mock(JsonRequest.class);
+		DefaultJsonRequest req = mock(DefaultJsonRequest.class);
 		try {
 			when(req.submitForJson(any(Object.class))).thenReturn(String.format("{\"code\":%d}", code));
 		} catch (IOException e) {
@@ -78,7 +78,7 @@ public final class MockJsonRequestFactory implements IJsonRequestFactory {
 	}
 
 	@Override
-	public JsonRequest get(Action action, URL url) {
+	public DefaultJsonRequest get(Action action, URL url) {
 		throw new UnsupportedOperationException("Mock does not implement this method!");
 	}
 

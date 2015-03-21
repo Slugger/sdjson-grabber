@@ -42,7 +42,7 @@ import org.schedulesdirect.api.RestNouns;
 import org.schedulesdirect.api.ZipEpgClient;
 import org.schedulesdirect.api.exception.InvalidJsonObjectException;
 import org.schedulesdirect.api.json.IJsonRequestFactory;
-import org.schedulesdirect.api.json.JsonRequest;
+import org.schedulesdirect.api.json.DefaultJsonRequest;
 import org.schedulesdirect.api.utils.AiringUtils;
 import org.schedulesdirect.api.utils.JsonResponseUtils;
 
@@ -120,7 +120,7 @@ class ScheduleTask implements Runnable {
 			LOG.info("No stale schedules identified; skipping schedule download!");
 			return;
 		}
-		JsonRequest req = factory.get(JsonRequest.Action.POST, RestNouns.SCHEDULES, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
+		DefaultJsonRequest req = factory.get(DefaultJsonRequest.Action.POST, RestNouns.SCHEDULES, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
 		JSONArray data = new JSONArray();
 		Iterator<String> idItr = ids.keySet().iterator();
 		while(idItr.hasNext()) {
@@ -196,7 +196,7 @@ class ScheduleTask implements Runnable {
 	
 	protected Map<String, Collection<String>> getStaleStationIds() {
 		Map<String, Collection<String>> staleIds = new HashMap<>();
-		JsonRequest req = factory.get(JsonRequest.Action.POST, RestNouns.SCHEDULE_MD5S, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
+		DefaultJsonRequest req = factory.get(DefaultJsonRequest.Action.POST, RestNouns.SCHEDULE_MD5S, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
 		JSONArray data = new JSONArray();
 		for(int i = 0; i < this.req.length(); ++i) {
 			JSONObject o = new JSONObject();
