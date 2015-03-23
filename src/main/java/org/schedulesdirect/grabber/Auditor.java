@@ -45,6 +45,7 @@ import org.schedulesdirect.api.Station;
 import org.schedulesdirect.api.ZipEpgClient;
 
 import com.beust.jcommander.ParameterException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * A debugging tool used to parse and inspect the raw data feeds and dump reports; mainly used for API development and debugging
@@ -112,7 +113,8 @@ public final class Auditor {
 					try(InputStream ins = Files.newInputStream(file)) {
 						input = IOUtils.toString(ins, ZipEpgClient.ZIP_CHARSET.toString());
 					}
-					JSONArray jarr = new JSONArray(new JSONObject(input).getJSONArray("programs").toString());
+					ObjectMapper mapper = Config.get().getObjectMapper();
+					JSONArray jarr = mapper.readValue(mapper.readValue(input, JSONObject.class).getJSONArray("programs").toString(), JSONArray.class);
 					for(int i = 1; i < jarr.length(); ++i) {
 						long start, prevStart;
 						JSONObject prev;
@@ -175,7 +177,8 @@ public final class Auditor {
 					try(InputStream ins = Files.newInputStream(file)) {
 						input = IOUtils.toString(ins, ZipEpgClient.ZIP_CHARSET.toString());
 					}
-					JSONArray jarr = new JSONArray(new JSONObject(input).getJSONArray("stations").toString());
+					ObjectMapper mapper = Config.get().getObjectMapper();
+					JSONArray jarr = mapper.readValue(mapper.readValue(input, JSONObject.class).getJSONArray("stations").toString(), JSONArray.class);
 					for(int i = 0; i < jarr.length(); ++i) {
 						JSONObject jobj = jarr.getJSONObject(i);
 						String id = jobj.getString("stationID");

@@ -29,14 +29,17 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.schedulesdirect.api.ApiResponse;
+import org.schedulesdirect.api.Config;
 import org.schedulesdirect.api.NetworkEpgClient;
 import org.schedulesdirect.api.Program;
 import org.schedulesdirect.api.RestNouns;
 import org.schedulesdirect.api.ZipEpgClient;
 import org.schedulesdirect.api.exception.InvalidJsonObjectException;
 import org.schedulesdirect.api.json.IJsonRequestFactory;
-import org.schedulesdirect.api.json.JsonRequest;
+import org.schedulesdirect.api.json.DefaultJsonRequest;
 import org.schedulesdirect.api.utils.JsonResponseUtils;
+
+import com.fasterxml.jackson.core.JsonParseException;
 
 /**
  * Downloads program data from the SD service in batch; writing the results to the given VFS
@@ -82,9 +85,9 @@ class ProgramTask implements Runnable {
 	@Override
 	public void run() {
 		long start = System.currentTimeMillis();
-		JsonRequest req = factory.get(JsonRequest.Action.POST, RestNouns.PROGRAMS, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
+		DefaultJsonRequest req = factory.get(DefaultJsonRequest.Action.POST, RestNouns.PROGRAMS, clnt.getHash(), clnt.getUserAgent(), clnt.getBaseUrl());
 		try {
-			JSONArray resp = new JSONArray(req.submitForJson(this.req));
+			JSONArray resp = Config.get().getObjectMapper().readValue(req.submitForJson(this.req), JSONArray.class);
 			for(int i = 0; i < resp.length(); ++i) {
 				JSONObject o = resp.getJSONObject(i);
 				String id = o.optString("programID", "<unknown>");
@@ -104,6 +107,10 @@ class ProgramTask implements Runnable {
 				} else
 					throw new InvalidJsonObjectException("Error received for Program", o.toString(3));
 			}
+		} catch (JSONException|JsonParseException e) {
+			Grabber.failedTask = true;
+			LOG.error("JSONError!", e);
+			throw new RuntimeException(e);
 		} catch(IOException e) {
 			Grabber.failedTask = true;
 			LOG.error("IOError receiving program data; filling in empty program info for non-existent program ids!", e);
@@ -119,10 +126,6 @@ class ProgramTask implements Runnable {
 				LOG.error("Unexpected error!", x);
 				throw new RuntimeException(x);
 			}
-		} catch (JSONException e) {
-			Grabber.failedTask = true;
-			LOG.error("JSONError!", e);
-			throw new RuntimeException(e);
 		}
 		LOG.info(String.format("Completed ProgramTask in %dms [%d programs]", System.currentTimeMillis() - start, this.req.length()));
 	}

@@ -55,6 +55,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.text.WordUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -80,7 +81,7 @@ import org.schedulesdirect.api.ZipEpgClient;
 import org.schedulesdirect.api.exception.InvalidCredentialsException;
 import org.schedulesdirect.api.exception.ServiceOfflineException;
 import org.schedulesdirect.api.json.IJsonRequestFactory;
-import org.schedulesdirect.api.json.JsonRequest;
+import org.schedulesdirect.api.json.DefaultJsonRequest;
 import org.schedulesdirect.api.json.JsonRequestFactory;
 import org.schedulesdirect.api.utils.AiringUtils;
 import org.schedulesdirect.api.utils.JsonResponseUtils;
@@ -88,6 +89,7 @@ import org.schedulesdirect.grabber.utils.PathUtils;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.ParameterException;
+import com.fasterxml.jackson.core.JsonParseException;
 
 /**
  * An application that will download a Schedules Direct user's lineup data from the servers and generates a zip file in response
@@ -147,11 +149,11 @@ public final class Grabber {
 	 */
 	static public final String GRABBER_VERSION = initVersion();
 	static private String initVersion() {
-		try(InputStream grabberProps = Grabber.class.getResourceAsStream("/sdjson-grabber.properties")) {
+		try(InputStream grabberProps = Grabber.class.getResourceAsStream("/sdjson-grabber-versioning.properties")) {
 			if(grabberProps != null) {
 				Properties p = new Properties();
 				p.load(grabberProps);
-				return p.getProperty("version");
+				return p.getProperty("VERSION_DISPLAY");
 			}			
 		} catch(IOException e) {
 			return "unknown";
@@ -173,7 +175,8 @@ public final class Grabber {
 		SEARCH,
 		AUDIT,
 		LISTMSGS,
-		DELMSG
+		DELMSG,
+		AVAILABLE
 	}
 	
 	static public final Logger getDisplay() { return Logger.getLogger(LOGGER_APP_DISPLAY); }
@@ -191,6 +194,7 @@ public final class Grabber {
 	private CommandAudit auditOpts;
 	private CommandListMsgs listMsgsOpts;
 	private CommandDeleteMsgs delMsgsOpts;
+	private CommandAvailable availOpts;
 	private boolean freshZip;
 	private long start;
 	private boolean logosWarned = false;
@@ -247,6 +251,8 @@ public final class Grabber {
 			parser.addCommand("listmsgs", listMsgsOpts);
 			delMsgsOpts = new CommandDeleteMsgs();
 			parser.addCommand("delmsg", delMsgsOpts);
+			availOpts = new CommandAvailable();
+			parser.addCommand("available", availOpts);
 			parser.parse(finalArgs.toArray(new String[finalArgs.size()]));
 			if(globalOpts.isHelp()) {
 				parser.usage();
@@ -441,7 +447,7 @@ public final class Grabber {
 		}
 	}
 	
-	private void updateZip(NetworkEpgClient clnt) throws IOException, JSONException {
+	private void updateZip(NetworkEpgClient clnt) throws IOException, JSONException, JsonParseException {
 		Set<String> completedListings = new HashSet<String>();
 		LOG.debug(String.format("Using %d worker threads", globalOpts.getMaxThreads()));
 		pool = createThreadPoolExecutor(); 
@@ -503,7 +509,7 @@ public final class Grabber {
 			Path cache = vfs.getPath(LOGO_CACHE);
 			if(Files.exists(cache)) {
 				String cacheData = new String(Files.readAllBytes(cache), ZipEpgClient.ZIP_CHARSET);
-				logoCache = new JSONObject(cacheData);
+				logoCache = Config.get().getObjectMapper().readValue(cacheData, JSONObject.class);
 			} else
 				logoCache = new JSONObject();
 			Path seriesInfo = vfs.getPath("/seriesInfo/");
@@ -513,7 +519,7 @@ public final class Grabber {
 			missingSeriesIds = Collections.synchronizedSet(new HashSet<String>());
 			loadRetryIds(vfs.getPath(SERIES_INFO_DATA));
 			
-			JSONObject resp = new JSONObject(factory.get(JsonRequest.Action.GET, RestNouns.LINEUPS, clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null));
+			JSONObject resp = Config.get().getObjectMapper().readValue(factory.get(DefaultJsonRequest.Action.GET, RestNouns.LINEUPS, clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null), JSONObject.class);
 			if(!JsonResponseUtils.isErrorResponse(resp))
 				Files.write(lineups, resp.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET));
 			else
@@ -521,7 +527,7 @@ public final class Grabber {
 			
 			for(Lineup l : clnt.getLineups()) {
 				buildStationList();
-				JSONObject o = new JSONObject(factory.get(JsonRequest.Action.GET, l.getUri(), clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null));
+				JSONObject o = Config.get().getObjectMapper().readValue(factory.get(DefaultJsonRequest.Action.GET, l.getUri(), clnt.getHash(), clnt.getUserAgent(), globalOpts.getUrl().toString()).submitForJson(null), JSONObject.class);
 				Files.write(vfs.getPath("/maps", ZipEpgClient.scrubFileName(String.format("%s.txt", l.getId()))), o.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET));
 				JSONArray stations = o.getJSONArray("stations");
 				JSONArray ids = new JSONArray();
@@ -533,7 +539,7 @@ public final class Grabber {
 					else if(completedListings.add(sid)) {
 						ids.put(sid);
 						if(!grabOpts.isNoLogos()) {
-							if(logoCacheInvalid(obj, vfs))
+							if(logoCacheInvalid(obj))
 								pool.execute(new LogoTask(obj, vfs, logoCache));
 							else if(LOG.isDebugEnabled())
 								LOG.debug(String.format("Skipped logo for %s; already cached!", obj.optString("callsign", null)));
@@ -543,7 +549,7 @@ public final class Grabber {
 						}
 					} else
 						LOG.debug(String.format("Skipped %s; already downloaded.", sid));
-					pool.setMaximumPoolSize(5); // Processing these new schedules takes all kinds of memory!
+					//pool.setMaximumPoolSize(5); // Processing these new schedules takes all kinds of memory!
 					if(ids.length() == grabOpts.getMaxSchedChunk()) {
 						pool.execute(new ScheduleTask(ids, vfs, clnt, progCache, factory));
 						ids = new JSONArray();
@@ -566,9 +572,10 @@ public final class Grabber {
 				LOG.warn("SchedLogoExecutor: Termination interrupted); some tasks probably didn't finish properly!");
 			}
 			Files.write(cache, logoCache.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
+			ScheduleTask.commit(vfs);
 
 			pool = createThreadPoolExecutor();
-			pool.setMaximumPoolSize(5); // Again, we've got memory problems
+			//pool.setMaximumPoolSize(5); // Again, we've got memory problems
 			String[] dirtyPrograms = progCache.getDirtyIds();
 			progCache.markAllClean();
 			progCache = null;
@@ -626,7 +633,7 @@ public final class Grabber {
 				LOG.error("One or more tasks failed!  Resetting last data refresh timestamp to zero.");
 				SimpleDateFormat fmt = Config.get().getDateTimeFormat();
 				String exp = fmt.format(new Date(0L));
-				JSONObject o = new JSONObject(userData);
+				JSONObject o = Config.get().getObjectMapper().readValue(userData, JSONObject.class);
 				o.put("lastDataUpdate", exp);
 				userData = o.toString(2);
 			}
@@ -635,10 +642,13 @@ public final class Grabber {
 			removeIgnoredStations(vfs);
 		} catch (URISyntaxException e1) {
 			throw new RuntimeException(e1);
+		} finally {
+			Runtime rt = Runtime.getRuntime();
+			LOG.info(String.format("MemStats:%n\tFREE: %s%n\tUSED: %s%n\t MAX: %s", FileUtils.byteCountToDisplaySize(rt.freeMemory()), FileUtils.byteCountToDisplaySize(rt.totalMemory()), FileUtils.byteCountToDisplaySize(rt.maxMemory())));
 		}
 	}
 	
-	private boolean logoCacheInvalid(JSONObject station, FileSystem vfs) throws JSONException, IOException {
+	private boolean logoCacheInvalid(JSONObject station) throws JSONException, IOException {
 		JSONObject logo = station.optJSONObject("logo");
 		if(logo != null) {
 			String callsign = station.getString("callsign");
@@ -662,7 +672,7 @@ public final class Grabber {
 			@Override
 			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 				try(InputStream ins = Files.newInputStream(file)) {
-					JSONArray sched = new JSONObject(IOUtils.toString(ins, ZipEpgClient.ZIP_CHARSET.toString())).getJSONArray("programs");
+					JSONArray sched = Config.get().getObjectMapper().readValue(IOUtils.toString(ins, ZipEpgClient.ZIP_CHARSET.toString()), JSONObject.class).getJSONArray("programs");
 					if(isScheduleExpired(sched)) {
 						Files.delete(file);
 						++i[0];
@@ -869,6 +879,17 @@ public final class Grabber {
 					} else
 						parser.usage(action.toString().toLowerCase());
 					break;
+				case AVAILABLE:
+					if(!availOpts.isHelp()) {
+						String type = availOpts.getType();
+						if(type == null)
+							listAvailableThings(clnt);
+						else
+							listAvailableThings(clnt, type); // TODO: change
+						rc = OK;
+					} else
+						parser.usage(action.toString().toLowerCase());
+					break;
 			}
 			return rc;
 		} catch(ParameterException e) {
@@ -916,6 +937,33 @@ public final class Grabber {
 		}
 	}
 
+	private void listAvailableThings(NetworkEpgClient clnt) throws IOException {
+		getDisplay().info(clnt.getAvailableTypes());
+	}
+	
+	private void listAvailableThings(NetworkEpgClient clnt, String type) throws IOException {
+		type = type.toLowerCase();
+		String json = clnt.getAvailableThings(type);
+		if("countries".equals(type))
+			getDisplay().info(formatCountries(json));
+		else {
+			LOG.warn(String.format("Type not supported; dumping raw response [%s]", type));
+			getDisplay().info(json);
+		}
+	}
+	
+	private String formatCountries(String json) throws IOException {
+		JSONObject resp = Config.get().getObjectMapper().readValue(json, JSONObject.class);
+		String fmt = "%-15s %15s %3s %-40s%n";
+		getDisplay().info("Use 'ISO' value when adding lineups to your account.");
+		getDisplay().info(String.format(fmt, "LOCATION", "", "ISO", "EXAMPLE"));
+		getDisplay().info(String.format("%s%n", StringUtils.repeat('=', 76)));
+		getDisplay().info(String.format("%s%n", "North America"));
+		getDisplay().info(String.format(fmt, "", "United States", "USA", "12345"));
+		getDisplay().info(String.format(fmt, "", "Canada", "CAN", "A0A0A0"));
+		return resp.toString(3);
+	}
+	
 	private void dumpAccountInfo(NetworkEpgClient clnt) throws IOException {
 		getDisplay().info(String.format("%s%n", clnt.getUserStatus().toJson().trim()));
 	}
