@@ -96,4 +96,8 @@ task uploadArchives (type:BintrayGenericUpload) {
 	onlyIf { !version.endsWith("SNAPSHOT") }
 }
 
+distTar {
+	compression = Compression.GZIP
+}
+
 compileJava { inputs.file versionFile }
