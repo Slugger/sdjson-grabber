@@ -77,6 +77,10 @@ dependencies {
 	testCompile 'org.powermock:powermock-api-mockito:1.5.4'
 }
 
+distTar {
+	compression = Compression.GZIP
+}
+
 task uploadSanityChecks << {
 	assert System.getProperty('bintray.user')
 	assert System.getProperty('bintray.key')
@@ -94,10 +98,6 @@ task uploadArchives (type:BintrayGenericUpload) {
 	sources distTar.outputs.files
 	dependsOn uploadSanityChecks, distZip, distTar
 	onlyIf { !version.endsWith("SNAPSHOT") }
-}
-
-distTar {
-	compression = Compression.GZIP
 }
 
 compileJava { inputs.file versionFile }
