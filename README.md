@@ -7,6 +7,8 @@ Starting with the API 20141201 release the grabber project has relocated to gith
 ## Newer Versions
 The newest versions of the grabber (API 20141201 and newer) will be located at bintray.  A link will be added here after the first release of API 20141201.
 
+**Link to binary builds of the grabber:** https://bintray.com/slugger/generic/sdjson-grabber/view
+
 ## Snapshots
 Snapshots are no longer built and made available, however in this release the project has moved to gradle for building and so building a snapshot of the grabber couldn't be easier.  All you need on your system is a proper version of the JDK and that's it.  The build wiki page has all the details (it's literally a single command).
 
