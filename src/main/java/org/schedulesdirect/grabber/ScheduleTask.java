@@ -1,5 +1,5 @@
 /*
- *      Copyright 2012-2015 Battams, Derek
+ *      Copyright 2012-2016 Battams, Derek
  *       
  *       Licensed under the Apache License, Version 2.0 (the "License");
  *       you may not use this file except in compliance with the License.
@@ -41,8 +41,8 @@ import org.schedulesdirect.api.NetworkEpgClient;
 import org.schedulesdirect.api.RestNouns;
 import org.schedulesdirect.api.ZipEpgClient;
 import org.schedulesdirect.api.exception.InvalidJsonObjectException;
-import org.schedulesdirect.api.json.IJsonRequestFactory;
 import org.schedulesdirect.api.json.DefaultJsonRequest;
+import org.schedulesdirect.api.json.IJsonRequestFactory;
 import org.schedulesdirect.api.utils.AiringUtils;
 import org.schedulesdirect.api.utils.JsonResponseUtils;
 
@@ -57,7 +57,7 @@ import com.fasterxml.jackson.core.JsonParseException;
 class ScheduleTask implements Runnable {
 	static private final Log LOG = LogFactory.getLog(ScheduleTask.class);
 	
-	static final Map<String, List<JSONObject>> FULL_SCHEDS = new HashMap<>();
+	static private final Map<String, List<JSONObject>> FULL_SCHEDS = new HashMap<>();
 	
 	static void commit(FileSystem vfs) throws IOException {
 		Iterator<String> itr = FULL_SCHEDS.keySet().iterator();
@@ -149,16 +149,9 @@ class ScheduleTask implements Runnable {
 							if(!end.before(expiry)) {
 								String md5 = airing.getString("md5");
 								cache.markIfDirty(progId, md5);
-							} else
+							} else if(LOG.isDebugEnabled())
 								LOG.debug(String.format("Expired airing discovered and ignored! [%s; %s; %s]", progId, o.getString("stationID"), end));
-							synchronized(ScheduleTask.class) {
-								List<JSONObject> objs = FULL_SCHEDS.get(schedId);
-								if(objs == null) {
-									objs = new ArrayList<JSONObject>();
-									FULL_SCHEDS.put(schedId, objs);
-								}
-								objs.add(airing);
-							}
+							insertAiring(schedId, airing);
 						} catch(JSONException e) {
 							LOG.warn(String.format("JSONException [%s]", o.optString("stationID", "unknown")), e);
 						}
@@ -226,8 +219,11 @@ class ScheduleTask implements Runnable {
 							dates.add(date);
 							if(LOG.isDebugEnabled())
 								LOG.debug(String.format("Station %s/%s queued for refresh!", stationId, date));
-						} else if(LOG.isDebugEnabled())
-							LOG.debug(String.format("Station %s is unchanged on the server; skipping it!", stationId));
+						} else {
+							if(LOG.isDebugEnabled())
+								LOG.debug(String.format("Station %s is unchanged on the server; skipping it!", stationId));
+							loadCachedScheduleForDate(stationId, date);
+						}
 					}
 					Files.write(cachedMd5File, stationInfo.toString(3).getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
 				}
@@ -237,5 +233,26 @@ class ScheduleTask implements Runnable {
 			LOG.error("Error processing cache; returning partial stale list!", t);
 		}
 		return staleIds;
+	}
+	
+	synchronized private void loadCachedScheduleForDate(String stationId, String date) throws IOException {
+		Path p = vfs.getPath("schedules", String.format("%s.txt", stationId));
+		if(Files.exists(p)) {
+			JSONArray sched = Config.get().getObjectMapper().readValue(new String(Files.readAllBytes(p), ZipEpgClient.ZIP_CHARSET.toString()), JSONObject.class).getJSONArray("programs");
+			for(int i = 0; i < sched.length(); ++i) {
+				JSONObject airing = sched.getJSONObject(i);
+				if(airing.getString("airDateTime").startsWith(date))
+					insertAiring(stationId, airing);
+			}
+		}
+	}
+	
+	synchronized private void insertAiring(String stationId, JSONObject airing) {
+		List<JSONObject> objs = FULL_SCHEDS.get(stationId);
+		if(objs == null) {
+			objs = new ArrayList<JSONObject>();
+			FULL_SCHEDS.put(stationId, objs);
+		}
+		objs.add(airing);
 	}
 }
