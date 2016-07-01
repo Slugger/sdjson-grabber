@@ -580,7 +580,7 @@ public final class Grabber {
 			progCache.markAllClean();
 			progCache = null;
 			LOG.info(String.format("Identified %d program ids requiring an update!", dirtyPrograms.length));
-			Collection<String> progIds = new ArrayList<String>();
+			Collection<String> progIds = new ArrayList<>();
 			for(String progId : dirtyPrograms) {
 				progIds.add(progId);
 				if(progIds.size() == grabOpts.getMaxProgChunk()) {
@@ -605,7 +605,28 @@ public final class Grabber {
 						LOG.info(String.format("Grabbing %d series info programs!", missingSeriesIds.size()));
 						Set<String> retrySet = new HashSet<>();
 						try {
-							new ProgramTask(missingSeriesIds, vfs, clnt, factory, missingSeriesIds, "seriesInfo", retrySet, true).run();
+                                                        int maxChunk = grabOpts.getMaxProgChunk();
+                                                        if(missingSeriesIds.size() <= maxChunk)
+                                                            new ProgramTask(missingSeriesIds, vfs, clnt, factory, missingSeriesIds, "seriesInfo", retrySet, true).run();
+                                                        else {
+                                                            pool = createThreadPoolExecutor();
+                                                            List<String> ids = new ArrayList<>();
+                                                            Iterator<String> mItr = missingSeriesIds.iterator();
+                                                            while(mItr.hasNext()) {
+                                                                String id = mItr.next();
+                                                                ids.add(id);
+                                                                if(ids.size() == maxChunk) {
+                                                                    pool.execute(new ProgramTask(ids, vfs, clnt, factory, missingSeriesIds, "seriesInfo", retrySet, true));
+                                                                    ids.clear();
+                                                                }
+                                                            }
+                                                            if(ids.size() > 0)
+                                                                pool.execute(new ProgramTask(ids, vfs, clnt, factory, missingSeriesIds, "seriesInfo", retrySet, true));
+                                                            pool.shutdown();
+                                                            LOG.debug("Waiting for SeriesInfoExecutor to terminate...");
+                                                            if(!pool.awaitTermination(15, TimeUnit.MINUTES))
+                                                                LOG.warn("SeriesInfoExecutor did not terminate properly!");
+                                                        }
 						} catch(RuntimeException e) {
 							LOG.error("SeriesInfo task failed!", e);
 							Grabber.failedTask = true;
@@ -614,7 +635,7 @@ public final class Grabber {
 						if(retrySet.size() > 0) {
 							StringBuilder sb = new StringBuilder();
 							for(String id : retrySet)
-								sb.append(id + "\n");
+								sb.append(id).append("\n");
 							Files.write(seriesInfoData, sb.toString().getBytes(ZipEpgClient.ZIP_CHARSET), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
 						} else if(Files.exists(seriesInfoData))
 							Files.delete(seriesInfoData);
