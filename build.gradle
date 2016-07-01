@@ -27,6 +27,7 @@ import org.ysb33r.gradle.bintray.BintrayGenericUpload
 plugins {
 	id 'java'
 	id 'eclipse'
+        id 'idea'
 	id 'application'
 	id 'net.nemerosa.versioning' version '1.3.0'
 }

@@ -9,3 +9,7 @@ target/
 /.settings/
 /.classpath
 /.project
+/sdjson-grabber.ipr
+/sdjson-grabber.iws
+/sdjson-grabber.iml
+/.nb-gradle-properties
