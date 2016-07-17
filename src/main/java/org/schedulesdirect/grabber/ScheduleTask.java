@@ -15,38 +15,25 @@
  */
 package org.schedulesdirect.grabber;
 
-import java.io.IOException;
-import java.nio.file.FileSystem;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-
+import com.fasterxml.jackson.core.JsonParseException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.schedulesdirect.api.ApiResponse;
-import org.schedulesdirect.api.Config;
-import org.schedulesdirect.api.NetworkEpgClient;
-import org.schedulesdirect.api.RestNouns;
-import org.schedulesdirect.api.ZipEpgClient;
+import org.schedulesdirect.api.*;
 import org.schedulesdirect.api.exception.InvalidJsonObjectException;
 import org.schedulesdirect.api.json.DefaultJsonRequest;
 import org.schedulesdirect.api.json.IJsonRequestFactory;
 import org.schedulesdirect.api.utils.AiringUtils;
 import org.schedulesdirect.api.utils.JsonResponseUtils;
 
-import com.fasterxml.jackson.core.JsonParseException;
+import java.io.IOException;
+import java.nio.file.FileSystem;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.*;
 
 /**
  * Download schedules in bulk
@@ -204,7 +191,11 @@ class ScheduleTask implements Runnable {
 					String stationId = idItr.next().toString();
 					boolean schedFileExists = Files.exists(vfs.getPath("schedules", String.format("%s.txt", stationId)));
 					Path cachedMd5File = vfs.getPath("md5s", String.format("%s.txt", stationId));
-					JSONObject cachedMd5s = Files.exists(cachedMd5File) ? Config.get().getObjectMapper().readValue(new String(Files.readAllBytes(cachedMd5File), ZipEpgClient.ZIP_CHARSET.toString()), JSONObject.class) : new JSONObject(); 
+					JSONObject cachedMd5s = Files.exists(cachedMd5File) ? Config.get().getObjectMapper().readValue(new String(Files.readAllBytes(cachedMd5File), ZipEpgClient.ZIP_CHARSET.toString()), JSONObject.class) : new JSONObject();
+					if (!(result.get(stationId) instanceof JSONObject)) { // Deals with https://github.com/SchedulesDirect/JSON-Service/issues/70
+						LOG.warn(String.format("MD5 response includes unexpected type instead of a JSONObject for station id %s", stationId));
+						continue;
+					}
 					JSONObject stationInfo = result.getJSONObject(stationId);
 					Iterator<?> dateItr = stationInfo.keys();
 					while(dateItr.hasNext()) {
